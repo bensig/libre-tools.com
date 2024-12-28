@@ -2,15 +2,13 @@ import React, { useState } from "react";
 import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
 
 const LibreExplorer = () => {
-  const NETWORKS = {
-    mainnet: "https://lb.libre.org/v1/chain",
-    testnet: "https://testnet.libre.org/v1/chain",
-    custom: "custom"
+  const NETWORK_ENDPOINTS = {
+    mainnet: 'https://lb.libre.org',
+    testnet: 'https://testnet.libre.org',
   };
 
-  const [networkType, setNetworkType] = useState('mainnet');
+  const [network, setNetwork] = useState('mainnet');
   const [customEndpoint, setCustomEndpoint] = useState('');
-  const [apiUrl, setApiUrl] = useState(NETWORKS.mainnet);
   const [accountName, setAccountName] = useState("");
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState("");
@@ -32,34 +30,60 @@ const LibreExplorer = () => {
   const [searchField, setSearchField] = useState('');
   const [isSearchable, setIsSearchable] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [customEndpointError, setCustomEndpointError] = useState('');
+  const [showCustomEndpoint, setShowCustomEndpoint] = useState(false);
 
-  const handleNetworkChange = (type) => {
-    setNetworkType(type);
-    if (type === 'custom') {
-      if (customEndpoint) {
-        setApiUrl(customEndpoint);
-      }
-    } else {
-      setApiUrl(NETWORKS[type]);
-    }
-    // Reset state when changing networks
-    setTables([]);
-    setSelectedTable("");
-    setScope("");
-    setRows([]);
-    setScopes([]);
+  const getApiEndpoint = (baseUrl) => {
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+    return `${cleanUrl}/v1/chain`;
   };
 
-  const handleCustomEndpointChange = (endpoint) => {
-    setCustomEndpoint(endpoint);
-    if (networkType === 'custom') {
-      setApiUrl(endpoint);
-      // Reset state when changing endpoint
-      setTables([]);
-      setSelectedTable("");
-      setScope("");
-      setRows([]);
-      setScopes([]);
+  const formatEndpoint = (url) => {
+    // Remove any trailing slashes
+    let cleanUrl = url.trim().replace(/\/$/, '');
+    
+    // If no protocol specified, add https://
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    
+    return cleanUrl;
+  };
+
+  const isValidUrl = (url) => {
+    try {
+      // Format the URL first
+      const formattedUrl = formatEndpoint(url);
+      new URL(formattedUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const fetchWithCorsHandling = async (baseEndpoint, path, options = {}) => {
+    try {
+      const formattedEndpoint = formatEndpoint(baseEndpoint);
+      const apiEndpoint = getApiEndpoint(formattedEndpoint);
+      const url = `${apiEndpoint}${path}`;
+      console.log('Fetching from:', url);
+      
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
     }
   };
 
@@ -73,11 +97,15 @@ const LibreExplorer = () => {
     try {
       // Get ABI tables
       console.log('Fetching ABI...');
-      const abiResponse = await fetch(`${apiUrl}/get_abi`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_name: accountName }),
-      });
+      const abiResponse = await fetchWithCorsHandling(
+        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
+        '/get_abi',
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_name: accountName }),
+        }
+      );
       const abiData = await abiResponse.json();
       if (abiData.error) {
         throw new Error(abiData.error.details?.[0]?.message || 'Invalid account');
@@ -88,14 +116,18 @@ const LibreExplorer = () => {
       
       // Get scope data
       console.log('Fetching scope data...');
-      const scopeResponse = await fetch(`${apiUrl}/get_table_by_scope`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          code: accountName,
-          limit: 100
-        }),
-      });
+      const scopeResponse = await fetchWithCorsHandling(
+        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
+        '/get_table_by_scope',
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            code: accountName,
+            limit: 100
+          }),
+        }
+      );
       const scopeData = await scopeResponse.json();
       console.log('Raw scope data:', scopeData.rows);
       
@@ -178,15 +210,19 @@ const LibreExplorer = () => {
     try {
       // Get all scopes for this table from the initial scope data
       console.log('Fetching scope data for table:', table);
-      const response = await fetch(`${apiUrl}/get_table_by_scope`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          code: accountName,
-          table: table,
-          limit: 100
-        }),
-      });
+      const response = await fetchWithCorsHandling(
+        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
+        `/get_table_by_scope`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            code: accountName,
+            table: table,
+            limit: 100
+          }),
+        }
+      );
       const data = await response.json();
       console.log('Raw scope data for table:', data.rows);
       
@@ -299,11 +335,16 @@ const LibreExplorer = () => {
       }
 
       console.log('Fetching rows with params:', params);
-      const response = await fetch(`${apiUrl}/get_table_rows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
+      const apiEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
+      const response = await fetchWithCorsHandling(
+        apiEndpoint,
+        `/get_table_rows`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        }
+      );
       
       const data = await response.json();
       console.log('Table rows response:', data);
@@ -364,7 +405,11 @@ const LibreExplorer = () => {
       }
     } catch (error) {
       console.error('Error in fetchTableRows:', error);
-      setError(error.message);
+      if (error.message.includes('CORS')) {
+        setError('CORS error: Unable to access API. Please try a different endpoint or use a CORS proxy.');
+      } else {
+        setError(error.message);
+      }
       setRows([]);
     } finally {
       setIsLoading(false);
@@ -452,11 +497,15 @@ const LibreExplorer = () => {
 
       console.log('Refreshing with params:', params);
       
-      const response = await fetch(`${apiUrl}/get_table_rows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
+      const response = await fetchWithCorsHandling(
+        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
+        `/get_table_rows`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        }
+      );
       
       const data = await response.json();
       
@@ -506,11 +555,15 @@ const LibreExplorer = () => {
       
       console.log('Clearing search, fetching with params:', params);
       
-      const response = await fetch(`${apiUrl}/get_table_rows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
+      const response = await fetchWithCorsHandling(
+        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
+        `/get_table_rows`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        }
+      );
       
       const data = await response.json();
       
@@ -529,6 +582,47 @@ const LibreExplorer = () => {
     }
   };
 
+  const fetchABI = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    const baseEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
+
+    // Validate custom endpoint
+    if (network === 'custom') {
+      if (!customEndpoint) {
+        setCustomEndpointError('API endpoint is required');
+        setIsLoading(false);
+        return;
+      }
+      if (!isValidUrl(customEndpoint)) {
+        setCustomEndpointError('Must be a valid domain name');
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const response = await fetchWithCorsHandling(
+        baseEndpoint,
+        '/get_abi',
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_name: accountName }),
+        }
+      );
+
+      const data = await response.json();
+      // ... rest of the function
+    } catch (error) {
+      console.error('Error fetching ABI:', error);
+      setError(`Error fetching ABI: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Libre Table Explorer</h1>
@@ -536,40 +630,42 @@ const LibreExplorer = () => {
       <Form className="mb-4">
         <Form.Group className="mb-3">
           <Form.Label>Network</Form.Label>
-          <div className="mb-3">
-            <Form.Check
-              inline
-              type="radio"
-              name="network"
-              label="Mainnet"
-              checked={networkType === 'mainnet'}
-              onChange={() => handleNetworkChange('mainnet')}
-            />
-            <Form.Check
-              inline
-              type="radio"
-              name="network"
-              label="Testnet"
-              checked={networkType === 'testnet'}
-              onChange={() => handleNetworkChange('testnet')}
-            />
-            <Form.Check
-              inline
-              type="radio"
-              name="network"
-              label="Custom"
-              checked={networkType === 'custom'}
-              onChange={() => handleNetworkChange('custom')}
-            />
-          </div>
-          {networkType === 'custom' && (
-            <Form.Control
-              type="text"
-              value={customEndpoint}
-              onChange={(e) => handleCustomEndpointChange(e.target.value)}
-              placeholder="Enter API endpoint (e.g., http://localhost:8888/v1/chain)"
-              className="mb-3"
-            />
+          <Form.Select
+            value={network}
+            onChange={(e) => {
+              setNetwork(e.target.value);
+              setCustomEndpointError('');
+              if (e.target.value === 'custom') {
+                setShowCustomEndpoint(true);
+              } else {
+                setShowCustomEndpoint(false);
+                setCustomEndpoint('');
+              }
+            }}
+          >
+            <option value="mainnet">Mainnet</option>
+            <option value="testnet">Testnet</option>
+            <option value="custom">Custom Endpoint</option>
+          </Form.Select>
+          {showCustomEndpoint && (
+            <div className="mt-2">
+              <Form.Control
+                type="text"
+                placeholder="Enter API endpoint (e.g., api.example.com)"
+                value={customEndpoint}
+                onChange={(e) => {
+                  setCustomEndpoint(e.target.value);
+                  setCustomEndpointError('');
+                }}
+                isInvalid={!!customEndpointError}
+              />
+              <Form.Control.Feedback type="invalid">
+                {customEndpointError}
+              </Form.Control.Feedback>
+              <Form.Text className="text-muted">
+                HTTPS will be used by default if protocol is not specified
+              </Form.Text>
+            </div>
           )}
         </Form.Group>
 
