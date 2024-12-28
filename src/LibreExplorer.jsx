@@ -28,6 +28,10 @@ const LibreExplorer = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [firstKey, setFirstKey] = useState(null);
+  const [searchKey, setSearchKey] = useState('');
+  const [searchField, setSearchField] = useState('');
+  const [isSearchable, setIsSearchable] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const handleNetworkChange = (type) => {
     setNetworkType(type);
@@ -151,7 +155,7 @@ const LibreExplorer = () => {
     const table = e.target.value;
     console.log('=== handleTableSelect called with table:', table, '===');
     
-    // Reset all pagination and load states
+    // Reset ALL state
     setCurrentPage(0);
     setPreviousKeys([]);
     setNextKey(null);
@@ -159,6 +163,9 @@ const LibreExplorer = () => {
     setWarningMessage(null);
     setError(null);
     setIsInitialLoad(true);
+    setSearchKey('');
+    setIsSearching(false);
+    setScope(null);  // Clear scope
     
     if (!table) {
       console.log('No table selected, returning');
@@ -233,6 +240,26 @@ const LibreExplorer = () => {
     fetchTables();
   };
 
+  const determineSearchField = (rows) => {
+    if (!rows || rows.length === 0) return null;
+    
+    // Get the first row to examine its structure
+    const firstRow = rows[0];
+    
+    // Common searchable fields and their display names
+    const searchableFields = {
+      'account': 'account name',
+      'id': 'ID',
+      'from': 'sender',
+      'to': 'recipient'
+    };
+    
+    // Find the first searchable field
+    const field = Object.keys(firstRow).find(key => searchableFields.hasOwnProperty(key));
+    
+    return field ? { field, displayName: searchableFields[field] } : null;
+  };
+
   const fetchTableRows = async (direction = 'forward', scopeOverride = null, tableOverride = null, append = false) => {
     console.log('=== fetchTableRows called ===');
     console.log('Direction:', direction);
@@ -259,8 +286,11 @@ const LibreExplorer = () => {
         reverse: direction === 'backward'
       };
 
-      // Store first key and handle pagination
-      if (isInitialLoad) {
+      // Handle search parameters if searching
+      if (searchKey && searchField) {
+        params.lower_bound = searchKey;
+        params.upper_bound = searchKey;
+      } else if (isInitialLoad) {
         // Don't add any bounds for initial load
       } else if (direction === 'forward' && nextKey) {
         params.lower_bound = nextKey;
@@ -283,10 +313,12 @@ const LibreExplorer = () => {
       }
 
       if (!data.rows || data.rows.length === 0) {
-        const curlCommand = `curl -X POST ${apiUrl}/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
-        console.log('No rows found. Curl command:', curlCommand);
-        setWarningMessage(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
-        setError(null);
+        if (isSearching) {
+          setWarningMessage(`No results found for ${searchField}: "${searchKey}"`);
+        } else {
+          const curlCommand = `curl -X POST ${apiUrl}/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
+          setWarningMessage(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
+        }
         setRows([]);
         return;
       } else {
@@ -321,12 +353,22 @@ const LibreExplorer = () => {
       } else if (direction === 'backward' && currentPage > 0) {
         setPreviousKeys(prev => prev.slice(0, -1));
       }
+
+      // Check if table is searchable after getting first results
+      if (isInitialLoad && data.rows.length > 0) {
+        const searchInfo = determineSearchField(data.rows);
+        setIsSearchable(!!searchInfo);
+        if (searchInfo) {
+          setSearchField(searchInfo.field);
+        }
+      }
     } catch (error) {
       console.error('Error in fetchTableRows:', error);
       setError(error.message);
       setRows([]);
     } finally {
       setIsLoading(false);
+      setIsSearching(false);
     }
   };
 
@@ -360,6 +402,131 @@ const LibreExplorer = () => {
     setError(null);
     setRows([]);
     fetchTableRows('forward', newScope, selectedTable);
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!searchKey.trim()) return;
+    
+    setIsSearching(true);
+    setWarningMessage(null);
+    setError(null);
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    setRows([]);
+    fetchTableRows('forward');
+  };
+
+  // Add refresh function
+  const refreshCurrentView = async () => {
+    setIsLoading(true);
+    setWarningMessage(null);
+    setError(null);
+
+    // If we have more than 100 rows, reset to first 10
+    if (rows.length > 100) {
+      setRows([]);
+      setCurrentPage(0);
+      setPreviousKeys([]);
+      setNextKey(null);
+      await fetchTableRows('forward');
+      return;
+    }
+
+    // Otherwise refresh current view
+    try {
+      const params = {
+        code: accountName,
+        table: selectedTable,
+        scope: scope,
+        limit: 10,
+        json: true
+      };
+
+      // Add search params if searching
+      if (searchKey && searchField) {
+        params.lower_bound = searchKey;
+        params.upper_bound = searchKey;
+      }
+
+      console.log('Refreshing with params:', params);
+      
+      const response = await fetch(`${apiUrl}/get_table_rows`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      
+      const data = await response.json();
+      
+      if (!data.rows || data.rows.length === 0) {
+        setWarningMessage(`No data found in scope "${scope}"`);
+        setRows([]);
+      } else {
+        setRows(data.rows);
+        setNextKey(data.next_key);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update clear search function to explicitly fetch new data
+  const clearSearch = async () => {
+    setIsLoading(true);
+    
+    // Clear search state
+    setSearchKey('');
+    setIsSearching(false);
+    
+    // Clear pagination state
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    
+    // Clear any errors or warnings
+    setWarningMessage(null);
+    setError(null);
+    
+    // Clear rows to show loading state
+    setRows([]);
+    
+    try {
+      const params = {
+        code: accountName,
+        table: selectedTable,
+        scope: scope,
+        limit: 10,
+        json: true
+      };
+      
+      console.log('Clearing search, fetching with params:', params);
+      
+      const response = await fetch(`${apiUrl}/get_table_rows`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      
+      const data = await response.json();
+      
+      if (!data.rows || data.rows.length === 0) {
+        setWarningMessage(`No data found in scope "${scope}"`);
+        setRows([]);
+      } else {
+        setRows(data.rows);
+        setNextKey(data.next_key);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -446,27 +613,31 @@ const LibreExplorer = () => {
           </Form.Group>
         )}
 
-        {selectedTable && (
+        {selectedTable && scopes.length > 0 && (
           <Form.Group className="mb-3">
             <Form.Label>Scope</Form.Label>
             <div className="d-flex gap-2">
               <Form.Select
-                value={scope}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setShowCustomScopeModal(true);
-                  } else {
-                    handleScopeChange(e.target.value);
-                  }
-                }}
+                value={scope || ''}
+                onChange={(e) => handleScopeChange(e.target.value)}
               >
-                {scopes.map(({ scope: scopeOption, count }) => (
-                  <option key={scopeOption} value={scopeOption}>
-                    {scopeOption} ({count.toLocaleString()} rows)
+                <option value="">Select a scope</option>
+                {scopes.map((scopeOption) => (
+                  <option key={scopeOption.scope} value={scopeOption.scope}>
+                    {scopeOption.scope} ({scopeOption.count} rows)
                   </option>
                 ))}
-                <option value="custom">Custom Scope...</option>
               </Form.Select>
+              {rows.length > 0 && (
+                <Button 
+                  variant="outline-primary"
+                  onClick={refreshCurrentView}
+                  disabled={isLoading}
+                >
+                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  Refresh
+                </Button>
+              )}
             </div>
           </Form.Group>
         )}
@@ -504,6 +675,35 @@ const LibreExplorer = () => {
         </Modal>
       </Form>
 
+      {/* Add search form */}
+      {isSearchable && rows.length > 0 && (
+        <Form onSubmit={handleSearch} className="mt-3">
+          <Form.Group className="d-flex gap-2">
+            <Form.Control
+              type="text"
+              placeholder={`Search by ${searchField}`}
+              value={searchKey}
+              onChange={(e) => setSearchKey(e.target.value)}
+            />
+            <Button type="submit" variant="primary" disabled={isLoading}>
+              Search
+            </Button>
+            {searchKey && (
+              <Button 
+                variant="secondary" 
+                onClick={clearSearch}
+                disabled={isLoading}
+              >
+                Clear
+              </Button>
+            )}
+          </Form.Group>
+          <Form.Text className="text-muted">
+            Enter exact {searchField} to search
+          </Form.Text>
+        </Form>
+      )}
+
       <div className="table-container">
         {isLoading ? (
           <div className="text-center p-4">
@@ -511,100 +711,108 @@ const LibreExplorer = () => {
               <span className="visually-hidden">Loading...</span>
             </Spinner>
           </div>
-        ) : warningMessage || (selectedTable && scope && rows.length === 0) ? (
-          <Alert variant="warning" className="mb-3">
-            <pre style={{ whiteSpace: 'pre-wrap', marginBottom: 0, fontSize: '0.9em' }}>
-              {warningMessage || `No data found in scope "${scope}" for table "${selectedTable}".`}
-            </pre>
-          </Alert>
-        ) : rows.length > 0 ? (
+        ) : isSearching ? (
+          <div className="fade mb-3 alert alert-info show">
+            Searching for {searchField}: "{searchKey}"...
+          </div>
+        ) : (
           <>
-            <div className="table-responsive mt-3">
-              <table className="table table-striped table-sm">
-                <thead>
-                  <tr>
-                    {Object.keys(rows[0]).map((key) => (
-                      <th key={key}>{key}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={index}>
-                      {Object.values(row).map((value, idx) => (
-                        <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
-                          {formatCellValue(value)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Pagination buttons */}
-            <div className="d-flex justify-content-between align-items-center mt-3">
-              <div className="d-flex gap-2">
-                {(!isInitialLoad && currentPage > 0 && firstKey) ? (
-                  <Button 
-                    variant="primary" 
-                    onClick={() => fetchTableRows('backward')}
-                    disabled={isLoading}
-                  >
-                    Previous
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="secondary" 
-                    disabled
-                  >
-                    Previous
-                  </Button>
-                )}
-                {nextKey ? (
-                  <Button 
-                    variant="primary" 
-                    onClick={() => fetchTableRows('forward')}
-                    disabled={isLoading}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="secondary" 
-                    disabled
-                  >
-                    Next
-                  </Button>
-                )}
+            {warningMessage && (
+              <div className="fade mb-3 alert alert-warning show">
+                <pre>{warningMessage}</pre>
               </div>
-              
-              {/* Load More button */}
-              {nextKey && (
-                <Button 
-                  variant="primary" 
-                  onClick={() => fetchTableRows('forward', null, null, true)}
-                  disabled={isLoading}
-                >
-                  Load More Rows
-                </Button>
-              )}
-            </div>
+            )}
+
+            {error && !warningMessage && (
+              <div className="alert alert-danger mt-3">
+                <pre>{error}</pre>
+              </div>
+            )}
+
+            {selectedTable && scope && rows.length === 0 ? (
+              <Alert variant="warning" className="mb-3">
+                <pre style={{ whiteSpace: 'pre-wrap', marginBottom: 0, fontSize: '0.9em' }}>
+                  No data found in scope "{scope}" for table "{selectedTable}".
+                </pre>
+              </Alert>
+            ) : rows.length > 0 ? (
+              <>
+                <div className="table-responsive mt-3">
+                  <table className="table table-striped table-sm">
+                    <thead>
+                      <tr>
+                        {Object.keys(rows[0]).map((key) => (
+                          <th key={key}>{key}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, index) => (
+                        <tr key={index}>
+                          {Object.values(row).map((value, idx) => (
+                            <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                              {formatCellValue(value)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination buttons */}
+                <div className="d-flex justify-content-between align-items-center mt-3">
+                  <div className="d-flex gap-2">
+                    {(!isInitialLoad && currentPage > 0 && firstKey) ? (
+                      <Button 
+                        variant="primary" 
+                        onClick={() => fetchTableRows('backward')}
+                        disabled={isLoading}
+                      >
+                        Previous
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="secondary" 
+                        disabled
+                      >
+                        Previous
+                      </Button>
+                    )}
+                    {nextKey ? (
+                      <Button 
+                        variant="primary" 
+                        onClick={() => fetchTableRows('forward')}
+                        disabled={isLoading}
+                      >
+                        Next
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="secondary" 
+                        disabled
+                      >
+                        Next
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Load More button */}
+                  {nextKey && (
+                    <Button 
+                      variant="primary" 
+                      onClick={() => fetchTableRows('forward', null, null, true)}
+                      disabled={isLoading}
+                    >
+                      Load More Rows
+                    </Button>
+                  )}
+                </div>
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </div>
-
-      {warningMessage && (
-        <div className="fade mb-3 alert alert-warning show">
-          <pre>{warningMessage}</pre>
-        </div>
-      )}
-
-      {error && !warningMessage && (
-        <div className="alert alert-danger mt-3">
-          <pre>{error}</pre>
-        </div>
-      )}
     </div>
   );
 };
