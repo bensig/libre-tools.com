@@ -24,6 +24,10 @@ const LibreExplorer = () => {
   const [limit] = useState(10);
   const [showCustomScopeModal, setShowCustomScopeModal] = useState(false);
   const [customScopeInput, setCustomScopeInput] = useState('');
+  const [warningMessage, setWarningMessage] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [firstKey, setFirstKey] = useState(null);
 
   const handleNetworkChange = (type) => {
     setNetworkType(type);
@@ -146,16 +150,23 @@ const LibreExplorer = () => {
   const handleTableSelect = async (e) => {
     const table = e.target.value;
     console.log('=== handleTableSelect called with table:', table, '===');
+    
+    // Reset all pagination and load states
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    setFirstKey(null);
+    setWarningMessage(null);
+    setError(null);
+    setIsInitialLoad(true);
+    
     if (!table) {
       console.log('No table selected, returning');
       return;
     }
 
-    // Update state synchronously
     setSelectedTable(table);
     setRows([]);
-    setNextKey(null);
-    setPreviousKeys([]);
     
     try {
       // Get all scopes for this table from the initial scope data
@@ -222,24 +233,40 @@ const LibreExplorer = () => {
     fetchTables();
   };
 
-  const fetchTableRows = async (direction = 'forward', scopeOverride = null, tableOverride = null) => {
+  const fetchTableRows = async (direction = 'forward', scopeOverride = null, tableOverride = null, append = false) => {
     console.log('=== fetchTableRows called ===');
     console.log('Direction:', direction);
     console.log('Scope override:', scopeOverride);
-    console.log('Current state - Table:', selectedTable, 'Scope:', scope);
+    console.log('Append:', append);
     
-    setError(null);
-    setIsLoading(true);
+    const currentScope = scopeOverride || scope;
+    const currentTable = tableOverride || selectedTable;
+    
+    console.log('Current state - Table:', currentTable, 'Scope:', currentScope);
+    
+    if (!currentTable || !currentScope) {
+      console.log('Missing table or scope, returning');
+      return;
+    }
+
     try {
-      const currentScope = scopeOverride || scope || accountName;
       const params = {
         code: accountName,
-        table: tableOverride || selectedTable,
+        table: currentTable,
         scope: currentScope,
-        limit: limit,
+        limit: 10,
         json: true,
         reverse: direction === 'backward'
       };
+
+      // Store first key and handle pagination
+      if (isInitialLoad) {
+        // Don't add any bounds for initial load
+      } else if (direction === 'forward' && nextKey) {
+        params.lower_bound = nextKey;
+      } else if (direction === 'backward' && previousKeys.length > 0 && currentPage > 0) {
+        params.upper_bound = previousKeys[previousKeys.length - 1];
+      }
 
       console.log('Fetching rows with params:', params);
       const response = await fetch(`${apiUrl}/get_table_rows`, {
@@ -258,18 +285,41 @@ const LibreExplorer = () => {
       if (!data.rows || data.rows.length === 0) {
         const curlCommand = `curl -X POST ${apiUrl}/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
         console.log('No rows found. Curl command:', curlCommand);
-        setError(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
+        setWarningMessage(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
+        setError(null);
         setRows([]);
         return;
+      } else {
+        setWarningMessage(null);
       }
 
-      setRows(data.rows);
+      if (isInitialLoad) {
+        setFirstKey(data.rows[0]?.account || null);
+        setIsInitialLoad(false);
+      }
+
+      // Update page counter only when not on initial load
+      if (!append && !isInitialLoad) {
+        if (direction === 'forward') {
+          setCurrentPage(prev => prev + 1);
+        } else if (direction === 'backward' && currentPage > 0) {
+          setCurrentPage(prev => prev - 1);
+        }
+      }
+
+      // Handle rows based on append flag and direction
+      if (append) {
+        setRows(prevRows => [...prevRows, ...data.rows]);
+      } else {
+        setRows(data.rows);
+      }
+      
       setNextKey(data.next_key);
       
-      if (direction === 'forward' && data.next_key) {
-        setPreviousKeys([...previousKeys, data.next_key]);
-      } else if (direction === 'backward') {
-        setPreviousKeys(previousKeys.slice(0, -1));
+      if (direction === 'forward' && !append) {
+        setPreviousKeys(prev => [...prev, data.next_key]);
+      } else if (direction === 'backward' && currentPage > 0) {
+        setPreviousKeys(prev => prev.slice(0, -1));
       }
     } catch (error) {
       console.error('Error in fetchTableRows:', error);
@@ -302,6 +352,14 @@ const LibreExplorer = () => {
     setError(null);
     await fetchTableRows('forward', customScopeInput, selectedTable);
     setCustomScopeInput('');
+  };
+
+  const handleScopeChange = (newScope) => {
+    setScope(newScope);
+    setWarningMessage(null);
+    setError(null);
+    setRows([]);
+    fetchTableRows('forward', newScope, selectedTable);
   };
 
   return (
@@ -398,10 +456,7 @@ const LibreExplorer = () => {
                   if (e.target.value === 'custom') {
                     setShowCustomScopeModal(true);
                   } else {
-                    setScope(e.target.value);
-                    setRows([]);
-                    setError(null);
-                    fetchTableRows('forward', e.target.value, selectedTable);
+                    handleScopeChange(e.target.value);
                   }
                 }}
               >
@@ -456,54 +511,100 @@ const LibreExplorer = () => {
               <span className="visually-hidden">Loading...</span>
             </Spinner>
           </div>
-        ) : error || (selectedTable && scope && rows.length === 0) ? (
+        ) : warningMessage || (selectedTable && scope && rows.length === 0) ? (
           <Alert variant="warning" className="mb-3">
             <pre style={{ whiteSpace: 'pre-wrap', marginBottom: 0, fontSize: '0.9em' }}>
-              {error || `No data found in scope "${scope}" for table "${selectedTable}".`}
+              {warningMessage || `No data found in scope "${scope}" for table "${selectedTable}".`}
             </pre>
           </Alert>
         ) : rows.length > 0 ? (
           <>
-            <div className="d-flex gap-2 mb-3">
-              <Button
-                variant="secondary"
-                onClick={() => fetchTableRows('backward')}
-                disabled={!previousKeys.length || isLoading}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => fetchTableRows('forward')}
-                disabled={!nextKey || isLoading}
-              >
-                Next
-              </Button>
-            </div>
-
-            <Table striped bordered hover>
-              <thead>
-                <tr>
-                  {Object.keys(rows[0]).map((key) => (
-                    <th key={key}>{key}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, index) => (
-                  <tr key={index}>
-                    {Object.values(row).map((value, idx) => (
-                      <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
-                        {formatCellValue(value)}
-                      </td>
+            <div className="table-responsive mt-3">
+              <table className="table table-striped table-sm">
+                <thead>
+                  <tr>
+                    {Object.keys(rows[0]).map((key) => (
+                      <th key={key}>{key}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => (
+                    <tr key={index}>
+                      {Object.values(row).map((value, idx) => (
+                        <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                          {formatCellValue(value)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination buttons */}
+            <div className="d-flex justify-content-between align-items-center mt-3">
+              <div className="d-flex gap-2">
+                {(!isInitialLoad && currentPage > 0 && firstKey) ? (
+                  <Button 
+                    variant="primary" 
+                    onClick={() => fetchTableRows('backward')}
+                    disabled={isLoading}
+                  >
+                    Previous
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="secondary" 
+                    disabled
+                  >
+                    Previous
+                  </Button>
+                )}
+                {nextKey ? (
+                  <Button 
+                    variant="primary" 
+                    onClick={() => fetchTableRows('forward')}
+                    disabled={isLoading}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="secondary" 
+                    disabled
+                  >
+                    Next
+                  </Button>
+                )}
+              </div>
+              
+              {/* Load More button */}
+              {nextKey && (
+                <Button 
+                  variant="primary" 
+                  onClick={() => fetchTableRows('forward', null, null, true)}
+                  disabled={isLoading}
+                >
+                  Load More Rows
+                </Button>
+              )}
+            </div>
           </>
         ) : null}
       </div>
+
+      {warningMessage && (
+        <div className="fade mb-3 alert alert-warning show">
+          <pre>{warningMessage}</pre>
+        </div>
+      )}
+
+      {error && !warningMessage && (
+        <div className="alert alert-danger mt-3">
+          <pre>{error}</pre>
+        </div>
+      )}
     </div>
   );
 };
