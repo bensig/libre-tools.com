@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
 
 const LibreExplorer = () => {
@@ -6,6 +6,13 @@ const LibreExplorer = () => {
     mainnet: 'https://lb.libre.org',
     testnet: 'https://testnet.libre.org',
   };
+
+  const EXAMPLE_ACCOUNTS = [
+    'x.libre',
+    'mining.libre',
+    'dex.libre',
+    'swap.libre'
+  ];
 
   const [network, setNetwork] = useState('mainnet');
   const [customEndpoint, setCustomEndpoint] = useState('');
@@ -32,6 +39,24 @@ const LibreExplorer = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [customEndpointError, setCustomEndpointError] = useState('');
   const [showCustomEndpoint, setShowCustomEndpoint] = useState(false);
+
+  // Add useEffect for autofocus
+  useEffect(() => {
+    document.querySelector('[name=accountName]')?.focus();
+  }, []);
+
+  // Define global function in useEffect
+  useEffect(() => {
+    window.handleExampleClick = (account) => {
+      setAccountName(account);
+      setTimeout(() => fetchTables(), 0);
+    };
+
+    // Cleanup
+    return () => {
+      window.handleExampleClick = undefined;
+    };
+  }, []); // Empty dependency array means this runs once on mount
 
   const getApiEndpoint = (baseUrl) => {
     const cleanUrl = baseUrl.replace(/\/$/, '');
@@ -90,6 +115,20 @@ const LibreExplorer = () => {
   const fetchTables = async () => {
     if (!accountName) return;
     
+    // Clear scope-related state
+    setScope(null);
+    setScopes([]);
+    setRows([]);
+    setSelectedTable("");
+    setTables([]);
+    setNextKey(null);
+    setPreviousKeys([]);
+    setCurrentPage(0);
+    setFirstKey(null);
+    setWarningMessage(null);
+    setIsSearching(false);
+    setSearchKey('');
+    
     setError(null);
     setIsLoading(true);
     console.log('=== Starting fetchTables for account:', accountName, '===');
@@ -107,8 +146,13 @@ const LibreExplorer = () => {
         }
       );
       const abiData = await abiResponse.json();
-      if (abiData.error) {
-        throw new Error(abiData.error.details?.[0]?.message || 'Invalid account');
+      
+      if (!abiData.abi || abiData.error) {
+        const exampleLinks = EXAMPLE_ACCOUNTS.map(account => 
+          `<a href="#" class="text-primary" onclick="event.preventDefault(); handleExampleClick('${account}')">${account}</a>`
+        ).join(', ');
+        
+        throw new Error(`No smart contract found on this account - try one of these: ${exampleLinks}`);
       }
       
       const abiTables = abiData.abi?.tables || [];
@@ -623,10 +667,32 @@ const LibreExplorer = () => {
     }
   };
 
+  // Add lowercase enforcement to account name input
+  const handleAccountNameChange = (e) => {
+    setAccountName(e.target.value.toLowerCase());
+  };
+
+  // Add lowercase enforcement to custom scope input
+  const handleCustomScopeChange = (e) => {
+    setCustomScopeInput(e.target.value.toLowerCase());
+  };
+
+  // Add lowercase enforcement to search key
+  const handleSearchKeyChange = (e) => {
+    setSearchKey(e.target.value.toLowerCase());
+  };
+
   return (
     <div className="max-w-xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Libre Table Explorer</h1>
       
+      <div className="alert alert-info mb-4">
+        Easily view the contents of any smart contract tables on Libre. It will automatically give you a list of table scopes - try <a href="#" className="text-primary" onClick={(e) => {
+          e.preventDefault();
+          window.handleExampleClick('x.libre');
+        }}>x.libre</a>
+      </div>
+
       <Form className="mb-4">
         <Form.Group className="mb-3">
           <Form.Label>Network</Form.Label>
@@ -674,9 +740,11 @@ const LibreExplorer = () => {
           <div className="d-flex gap-2">
             <Form.Control
               type="text"
+              name="accountName"
               value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-              placeholder="Enter account name"
+              onChange={handleAccountNameChange}
+              placeholder="enter account name"
+              autoFocus
               onKeyPress={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -749,8 +817,8 @@ const LibreExplorer = () => {
               <Form.Control
                 type="text"
                 value={customScopeInput}
-                onChange={(e) => setCustomScopeInput(e.target.value)}
-                placeholder="Enter scope name"
+                onChange={handleCustomScopeChange}
+                placeholder="enter scope name"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -777,9 +845,9 @@ const LibreExplorer = () => {
           <Form.Group className="d-flex gap-2">
             <Form.Control
               type="text"
-              placeholder={`Search by ${searchField}`}
+              placeholder={`search by ${searchField}`}
               value={searchKey}
-              onChange={(e) => setSearchKey(e.target.value)}
+              onChange={handleSearchKeyChange}
             />
             <Button type="submit" variant="primary" disabled={isLoading}>
               Search
@@ -820,9 +888,10 @@ const LibreExplorer = () => {
             )}
 
             {error && !warningMessage && (
-              <div className="alert alert-danger mt-3">
-                <pre>{error}</pre>
-              </div>
+              <div 
+                className="alert alert-danger mt-3"
+                dangerouslySetInnerHTML={{ __html: error }}
+              />
             )}
 
             {selectedTable && scope && rows.length === 0 ? (
