@@ -11,7 +11,7 @@ const LibreExplorer = () => {
     'x.libre',
     'mining.libre',
     'dex.libre',
-    'swap.libre'
+    'loan'
   ];
 
   const [network, setNetwork] = useState('mainnet');
@@ -688,10 +688,23 @@ const LibreExplorer = () => {
       <h1 className="text-3xl font-bold mb-6">Libre Table Explorer</h1>
       
       <div className="alert alert-info mb-4">
-        Easily view the contents of any smart contract tables on Libre. It will automatically give you a list of table scopes - try <a href="#" className="text-primary" onClick={(e) => {
+        Easily view the contents of any smart contract tables on Libre. It will automatically give you a list of table scopes - try {' '}
+        <a href="#" className="text-primary" onClick={(e) => {
+          e.preventDefault();
+          window.handleExampleClick('dex.libre');
+        }}>dex.libre</a>, {' '}
+        <a href="#" className="text-primary" onClick={(e) => {
           e.preventDefault();
           window.handleExampleClick('x.libre');
-        }}>x.libre</a>
+        }}>x.libre</a>, {' '}
+        <a href="#" className="text-primary" onClick={(e) => {
+          e.preventDefault();
+          window.handleExampleClick('mining.libre');
+        }}>mining.libre</a>, {' '}
+        <a href="#" className="text-primary" onClick={(e) => {
+          e.preventDefault();
+          window.handleExampleClick('loan');
+        }}>loan</a>
       </div>
 
       <Form className="mb-4">
