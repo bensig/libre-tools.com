@@ -26,7 +26,7 @@ const LibreExplorer = () => {
   const [nextKey, setNextKey] = useState(null);
   const [previousKeys, setPreviousKeys] = useState([]);
   const [scopes, setScopes] = useState([]);
-  const [limit] = useState(10);
+  const [limit] = useState(100);
   const [showCustomScopeModal, setShowCustomScopeModal] = useState(false);
   const [customScopeInput, setCustomScopeInput] = useState('');
   const [warningMessage, setWarningMessage] = useState(null);
@@ -361,7 +361,7 @@ const LibreExplorer = () => {
         code: accountName,
         table: currentTable,
         scope: currentScope,
-        limit: 10,
+        limit: limit,
         json: true,
         reverse: direction === 'backward'
       };
@@ -401,7 +401,8 @@ const LibreExplorer = () => {
         if (isSearching) {
           setWarningMessage(`No results found for ${searchField}: "${searchKey}"`);
         } else {
-          const curlCommand = `curl -X POST ${apiUrl}/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
+          const apiEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
+          const curlCommand = `curl -X POST ${apiEndpoint}/v1/chain/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
           setWarningMessage(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
         }
         setRows([]);
@@ -513,8 +514,8 @@ const LibreExplorer = () => {
     setWarningMessage(null);
     setError(null);
 
-    // If we have more than 100 rows, reset to first 10
-    if (rows.length > 100) {
+    // If we have more than 1000 rows, reset to first 100
+    if (rows.length > 1000) {
       setRows([]);
       setCurrentPage(0);
       setPreviousKeys([]);
@@ -529,7 +530,7 @@ const LibreExplorer = () => {
         code: accountName,
         table: selectedTable,
         scope: scope,
-        limit: 10,
+        limit: limit,
         json: true
       };
 
@@ -593,7 +594,7 @@ const LibreExplorer = () => {
         code: accountName,
         table: selectedTable,
         scope: scope,
-        limit: 10,
+        limit: limit,
         json: true
       };
       
@@ -764,44 +765,36 @@ const LibreExplorer = () => {
 
         {tables.length > 0 && (
           <Form.Group className="mb-3">
-            <Form.Label>Select Table</Form.Label>
-            <Form.Select 
-              value={selectedTable}
-              onChange={handleTableSelect}
-            >
-              <option value="">-- Select Table --</option>
+            <Form.Label>Tables</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
               {tables.map((table) => (
-                <option key={table} value={table}>{table}</option>
+                <Button
+                  key={table}
+                  variant={selectedTable === table ? "primary" : "outline-primary"}
+                  onClick={() => handleTableSelect({ target: { value: table } })}
+                  size="sm"
+                >
+                  {table}
+                </Button>
               ))}
-            </Form.Select>
+            </div>
           </Form.Group>
         )}
 
         {selectedTable && scopes.length > 0 && (
           <Form.Group className="mb-3">
-            <Form.Label>Scope</Form.Label>
-            <div className="d-flex gap-2">
-              <Form.Select
-                value={scope || ''}
-                onChange={(e) => handleScopeChange(e.target.value)}
-              >
-                <option value="">Select a scope</option>
-                {scopes.map((scopeOption) => (
-                  <option key={scopeOption.scope} value={scopeOption.scope}>
-                    {scopeOption.scope} ({scopeOption.count} rows)
-                  </option>
-                ))}
-              </Form.Select>
-              {rows.length > 0 && (
-                <Button 
-                  variant="outline-primary"
-                  onClick={refreshCurrentView}
-                  disabled={isLoading}
+            <Form.Label>Scopes</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {scopes.map((scopeOption) => (
+                <Button
+                  key={scopeOption.scope}
+                  variant={scope === scopeOption.scope ? "primary" : "outline-primary"}
+                  onClick={() => handleScopeChange(scopeOption.scope)}
+                  size="sm"
                 >
-                  <i className="bi bi-arrow-clockwise me-1"></i>
-                  Refresh
+                  {scopeOption.scope} ({scopeOption.count})
                 </Button>
-              )}
+              ))}
             </div>
           </Form.Group>
         )}
@@ -962,16 +955,25 @@ const LibreExplorer = () => {
                     )}
                   </div>
                   
-                  {/* Load More button */}
-                  {nextKey && (
+                  {/* Action buttons on the right */}
+                  <div className="d-flex gap-2">
                     <Button 
                       variant="primary" 
-                      onClick={() => fetchTableRows('forward', null, null, true)}
+                      onClick={refreshCurrentView}
                       disabled={isLoading}
                     >
-                      Load More Rows
+                      Refresh Data
                     </Button>
-                  )}
+                    {nextKey && (
+                      <Button 
+                        variant="primary" 
+                        onClick={() => fetchTableRows('forward', null, null, true)}
+                        disabled={isLoading}
+                      >
+                        Load More Rows
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </>
             ) : null}
