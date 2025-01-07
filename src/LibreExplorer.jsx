@@ -712,7 +712,7 @@ const LibreExplorer = () => {
             {selectedAction && (
                 <div className="card">
                     <div className="card-header">
-                        <h5 className="mb-0">{selectedAction.name} Parameters</h5>
+                        <h5 className="mb-0">{selectedAction.name}</h5>
                     </div>
                     <div className="card-body">
                         {findStructForAction(selectedAction.type).map(field => (
