@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
-import { Navbar, Nav, Container } from 'react-bootstrap';
+import { Navbar, Container, Nav } from 'react-bootstrap';
 
 const Layout = ({ children }) => {
   return (
     <>
       <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
-        <Container>
+        <Container fluid>
           <Navbar.Brand as={Link} to="/">
             <img
               src="/libre-favicon.png"
@@ -19,18 +19,17 @@ const Layout = ({ children }) => {
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav">
             <Nav className="me-auto">
-              <Nav.Link as={Link} to="/">Smart Contract Explorer</Nav.Link>
+              <Nav.Link as={Link} to="/">Home</Nav.Link>
+              <Nav.Link as={Link} to="/explorer">Smart Contract Explorer</Nav.Link>
               <Nav.Link as={Link} to="/transactions">Transaction History</Nav.Link>
               <Nav.Link as={Link} to="/btc-tracker">BTC Tracker</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      <Container>
-        {children}
-      </Container>
+      {children}
     </>
   );
-};
+}
 
 export default Layout; 
