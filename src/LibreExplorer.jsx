@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
+import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton, Toast, ToastContainer } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
 
 const LibreExplorer = () => {
@@ -40,6 +40,9 @@ const LibreExplorer = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [customEndpointError, setCustomEndpointError] = useState('');
   const [showCustomEndpoint, setShowCustomEndpoint] = useState(false);
+  const [view, setView] = useState('tables');
+  const [actions, setActions] = useState([]);
+  const [abiData, setAbiData] = useState(null);
 
   // Add useEffect for autofocus
   useEffect(() => {
@@ -60,12 +63,30 @@ const LibreExplorer = () => {
     };
   }, []); // Empty dependency array means this runs once on mount
 
-  // Add this useEffect to watch network changes
+  // Add this useEffect to handle network changes
   useEffect(() => {
+    // Clear all data when network changes
+    setTables([]);
+    setActions([]);
+    setAbiData(null);
+    setSelectedTable(null);
+    setRows([]);
+    setScope(null);
+    setError(null);
+    
+    // If we have an account name, refetch the data
     if (accountName) {
-      fetchTables();
+        fetchTables();
     }
   }, [network, customEndpoint]); // Trigger when network or customEndpoint changes
+
+  useEffect(() => {
+    console.log('ABI Data changed:', abiData);
+  }, [abiData]);
+
+  useEffect(() => {
+    console.log('Actions changed:', actions);
+  }, [actions]);
 
   const getApiEndpoint = () => {
     if (network === 'custom') {
@@ -129,131 +150,49 @@ const LibreExplorer = () => {
   };
 
   const fetchTables = async () => {
-    if (!accountName) return;
-    
-    // Clear scope-related state
-    setScope(null);
-    setScopes([]);
-    setRows([]);
-    setSelectedTable("");
-    setTables([]);
-    setNextKey(null);
-    setPreviousKeys([]);
-    setCurrentPage(0);
-    setFirstKey(null);
-    setWarningMessage(null);
-    setIsSearching(false);
-    setSearchKey('');
-    
-    setError(null);
     setIsLoading(true);
-    console.log('=== Starting fetchTables for account:', accountName, '===');
+    setError(null);
+    setTables([]);
+    setActions([]);
     
     try {
-      // Get ABI tables
-      console.log('Fetching ABI...');
-      const abiResponse = await fetchWithCorsHandling(
-        '/v1/chain/get_abi',
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_name: accountName }),
-        }
-      );
-      const abiData = await abiResponse.json();
-      
-      if (!abiData.abi || abiData.error) {
-        setError(
-          <div>
-            No smart contract found on this account - try one of these:{' '}
-            {EXAMPLE_ACCOUNTS.map((account, index) => (
-              <span key={account}>
-                <a 
-                  href="#" 
-                  className="text-primary"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.handleExampleClick(account);
-                  }}
-                >
-                  {account}
-                </a>
-                {index < EXAMPLE_ACCOUNTS.length - 1 ? ', ' : ''}
-              </span>
-            ))}
-          </div>
+        // Get ABI data
+        console.log('Fetching ABI for account:', accountName);
+        const abiResponse = await fetchWithCorsHandling(
+            '/v1/chain/get_abi',
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ account_name: accountName }),
+            }
         );
-        return;
-      }
-      
-      const abiTables = abiData.abi?.tables || [];
-      console.log('ABI Tables:', abiTables);
-      
-      // Get scope data
-      console.log('Fetching scope data...');
-      const scopeResponse = await fetchWithCorsHandling(
-        '/v1/chain/get_table_by_scope',
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            code: accountName,
-            limit: 100
-          }),
+        const abiData = await abiResponse.json();
+        console.log('Full ABI data:', abiData); // Debug log
+        setAbiData(abiData); // Store the full ABI data
+        
+        if (!abiData.abi) {
+            console.log('No ABI found for account:', accountName);
+            setError(`No ABI found for account: ${accountName}`);
+            return;
         }
-      );
-      const scopeData = await scopeResponse.json();
-      console.log('Raw scope data:', scopeData.rows);
-      
-      // Create a map of base tables to their best scopes
-      const tableData = {};
-      
-      // First, add all ABI tables to ensure we don't miss any
-      abiTables.forEach(table => {
-        tableData[table.name] = {
-          table: table.name,
-          scope: accountName, // default scope
-          count: 0
-        };
-      });
-      
-      // Then update with actual scope data
-      scopeData.rows.forEach(row => {
-        const baseTable = row.table.replace(/\.\.\.?\d+$/, '');
-        if (!tableData[baseTable] || tableData[baseTable].count < row.count) {
-          tableData[baseTable] = {
-            table: baseTable,
-            scope: row.scope,
-            count: row.count
-          };
-        }
-      });
-      
-      console.log('Processed table data:', tableData);
 
-      // Get all available tables from ABI
-      const availableTables = abiTables
-        .map(table => table.name)
-        .sort();
+        // Get actions from the ABI
+        const abiActions = abiData.abi?.actions || [];
+        console.log('Setting actions:', abiActions);
+        setActions(abiActions);
+        
+        // Get tables from the ABI
+        const abiTables = abiData.abi?.tables || [];
+        console.log('Setting tables:', abiTables);
+        setTables(abiTables.map(table => table.name));
 
-      console.log('Final available tables:', availableTables);
-      setTables(availableTables);
-
-      // Auto-select first table
-      if (availableTables.length > 0) {
-        const firstTable = availableTables[0];
-        console.log('Auto-selecting first table:', firstTable);
-        // Set the table state first
-        setSelectedTable(firstTable);
-        // Then fetch data with the known table value
-        await handleTableSelect({ target: { value: firstTable } });
-      }
+        // Rest of the function...
     } catch (error) {
-      console.error('Error in fetchTables:', error);
-      setError(error.message);
-      setTables([]);
+        console.error('Error in fetchTables:', error);
+        setError(error.message);
+        setTables([]);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
@@ -339,10 +278,10 @@ const LibreExplorer = () => {
       // Add warning about row count discrepancy
       const selectedScopeData = scopeList.find(s => s.scope === bestScope);
       if (selectedScopeData && selectedScopeData.count > 0) {
-        setWarningMessage(
-          `Note: The scope shows ${selectedScopeData.count} total rows, but this includes both active and deleted rows. ` +
-          `The table below shows only active rows.`
-        );
+        setWarningMessage(`
+          Note: The scope API reported ${selectedScopeData.count} total rows, but this includes both active and inactive rows.
+          The table above shows only active rows which may differ from that count.
+        `.trim().replace(/^\s+/gm, ''));
       }
       
       // Use the current table value directly
@@ -624,39 +563,31 @@ const LibreExplorer = () => {
     setIsLoading(true);
     setError(null);
 
-    const baseEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
-
-    // Validate custom endpoint
-    if (network === 'custom') {
-      if (!customEndpoint) {
-        setCustomEndpointError('API endpoint is required');
-        setIsLoading(false);
-        return;
-      }
-      if (!isValidUrl(customEndpoint)) {
-        setCustomEndpointError('Must be a valid domain name');
-        setIsLoading(false);
-        return;
-      }
-    }
-
     try {
-      const response = await fetchWithCorsHandling(
-        `/get_abi`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_name: accountName }),
-        }
-      );
+        const response = await fetchWithCorsHandling(
+            '/v1/chain/get_abi',
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ account_name: accountName }),
+            }
+        );
 
-      const data = await response.json();
-      // ... rest of the function
+        const data = await response.json();
+        console.log('Full ABI data:', data); // Debug log
+        setAbiData(data); // Store the full ABI data
+        
+        if (data.abi) {
+            // Get actions from the ABI
+            setActions(data.abi.actions || []);
+            // Get tables from the ABI
+            setTables(data.abi.tables.map(table => table.name));
+        }
     } catch (error) {
-      console.error('Error fetching ABI:', error);
-      setError(`Error fetching ABI: ${error.message}`);
+        console.error('Error fetching ABI:', error);
+        setError(`Error fetching ABI: ${error.message}`);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
@@ -695,6 +626,152 @@ const LibreExplorer = () => {
     return true;
   };
 
+  const ActionsList = ({ actions, abiData }) => {
+    const [selectedAction, setSelectedAction] = useState(null);
+    const [actionParams, setActionParams] = useState({});
+    const [paramErrors, setParamErrors] = useState({});
+    const [showToast, setShowToast] = useState(false);
+
+    const findStructForAction = (actionType) => {
+        const struct = abiData?.abi?.structs?.find(s => s.name === actionType);
+        return struct?.fields || [];
+    };
+
+    const handleActionSelect = (action) => {
+        setSelectedAction(action);
+        // Reset params and errors when selecting a new action
+        setActionParams({});
+        setParamErrors({});
+    };
+
+    const validateField = (type, value) => {
+        if (!value) return "Field is required";
+        
+        switch (type) {
+            case 'name':
+                return /^[a-z1-5.]{1,12}$/.test(value) ? null : "Invalid name format";
+            case 'uint64':
+                return /^\d+$/.test(value) && parseInt(value) >= 0 ? null : "Must be a positive number";
+            case 'uint16':
+                return /^\d+$/.test(value) && parseInt(value) >= 0 && parseInt(value) <= 65535 ? null : "Must be a number between 0 and 65535";
+            case 'asset':
+                return /^\d+\.?\d*\s[A-Z]{1,7}$/.test(value) ? null : "Invalid asset format (e.g., '1.0000 LIBRE')";
+            case 'string':
+                return value.length > 0 ? null : "String cannot be empty";
+            case 'time_point_sec':
+                // Check if it's a valid Unix timestamp (positive integer)
+                return /^\d+$/.test(value) && parseInt(value) >= 0 ? null : "Must be a Unix timestamp (seconds since epoch)";
+            case 'checksum256':
+                return /^[a-f0-9]{64}$/.test(value) ? null : "Invalid checksum (64 hex characters)";
+            default:
+                return null;
+        }
+    };
+
+    const handleParamChange = (field, value) => {
+        setActionParams(prev => ({
+            ...prev,
+            [field]: value
+        }));
+
+        const fields = findStructForAction(selectedAction.type);
+        const fieldDef = fields.find(f => f.name === field);
+        const error = validateField(fieldDef.type, value);
+
+        setParamErrors(prev => ({
+            ...prev,
+            [field]: error
+        }));
+    };
+
+    const handleSubmit = () => {
+        setShowToast(true);
+        console.log('Action params:', actionParams);
+    };
+
+    return (
+        <div className="mt-3">
+            {/* Action Buttons */}
+            <div className="mb-3">
+                <label className="form-label">Actions</label>
+                <div className="d-flex gap-2 flex-wrap">
+                    {actions.map(action => (
+                        <Button
+                            key={action.name}
+                            variant={selectedAction?.name === action.name ? "primary" : "outline-primary"}
+                            onClick={() => handleActionSelect(action)}
+                            className="mb-2"
+                        >
+                            {action.name}
+                        </Button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Action Parameters Form */}
+            {selectedAction && (
+                <div className="card">
+                    <div className="card-header">
+                        <h5 className="mb-0">{selectedAction.name} Parameters</h5>
+                    </div>
+                    <div className="card-body">
+                        {findStructForAction(selectedAction.type).map(field => (
+                            <div key={field.name} className="mb-3">
+                                <label className="form-label">
+                                    {field.name} <small className="text-muted">({field.type})</small>
+                                </label>
+                                <input
+                                    type="text"
+                                    className={`form-control ${paramErrors[field.name] ? 'is-invalid' : ''}`}
+                                    value={actionParams[field.name] || ''}
+                                    onChange={(e) => handleParamChange(field.name, e.target.value)}
+                                    placeholder={field.type === 'time_point_sec' ? 
+                                        `Current timestamp: ${Math.floor(Date.now() / 1000)}` : 
+                                        `Enter ${field.type}`}
+                                />
+                                {paramErrors[field.name] && (
+                                    <div className="invalid-feedback">
+                                        {paramErrors[field.name]}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        <Button 
+                            variant="primary"
+                            onClick={handleSubmit}
+                            disabled={Object.keys(paramErrors).some(key => paramErrors[key])}
+                        >
+                            Submit Action
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            <ToastContainer position="bottom-end" className="p-3">
+                <Toast 
+                    onClose={() => setShowToast(false)} 
+                    show={showToast} 
+                    delay={3000} 
+                    autohide
+                >
+                    <Toast.Header>
+                        <strong className="me-auto">Action Submission</strong>
+                    </Toast.Header>
+                    <Toast.Body>Coming soon!</Toast.Body>
+                </Toast>
+            </ToastContainer>
+        </div>
+    );
+  };
+
+  // Update the NetworkSelector to trigger data refresh
+  const handleNetworkChange = (newNetwork) => {
+    setNetwork(newNetwork);
+    if (accountName) {
+        fetchTables();
+    }
+  };
+
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
@@ -729,7 +806,7 @@ const LibreExplorer = () => {
             <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
               <NetworkSelector
                 network={network}
-                setNetwork={setNetwork}
+                setNetwork={handleNetworkChange}
                 customEndpoint={customEndpoint}
                 setCustomEndpoint={setCustomEndpoint}
                 customEndpointError={customEndpointError}
@@ -743,7 +820,7 @@ const LibreExplorer = () => {
                 <div className="d-flex gap-2">
                   <Form.Control
                     type="text"
-                    name="smartContractAccount"
+                    name="accountName"
                     value={accountName}
                     onChange={handleAccountNameChange}
                     isInvalid={accountName && !isValidLibreAccount(accountName)}
@@ -772,183 +849,248 @@ const LibreExplorer = () => {
               </div>
             </Form.Group>
 
-            {tables.length > 0 && (
-              <Form.Group className="mb-3">
-                <Form.Label>Tables</Form.Label>
-                <div className="d-flex flex-wrap gap-2">
-                  {tables.map((table) => (
-                    <Button
-                      key={table}
-                      variant={selectedTable === table ? "primary" : "outline-primary"}
-                      onClick={() => handleTableSelect({ target: { value: table } })}
-                      size="sm"
-                    >
-                      {table}
-                    </Button>
-                  ))}
+            {(tables.length > 0 || actions.length > 0) && (
+                <div className="mb-4">
+                    <div className="btn-group">
+                        <Button
+                            variant={view === 'tables' ? 'primary' : 'outline-primary'}
+                            onClick={() => setView('tables')}
+                        >
+                            Tables {tables.length > 0 && `(${tables.length})`}
+                        </Button>
+                        <Button
+                            variant={view === 'actions' ? 'primary' : 'outline-primary'}
+                            onClick={() => setView('actions')}
+                        >
+                            Actions {actions.length > 0 && `(${actions.length})`}
+                        </Button>
+                    </div>
                 </div>
-              </Form.Group>
             )}
 
-            {selectedTable && scopes.length > 0 && (
-              <Form.Group className="mb-3">
-                <Form.Label>Scopes</Form.Label>
-                <div className="d-flex flex-wrap gap-2">
-                  {scopes.map((scopeOption) => (
-                    <Button
-                      key={scopeOption.scope}
-                      variant={scope === scopeOption.scope ? "primary" : "outline-primary"}
-                      onClick={() => handleScopeChange(scopeOption.scope)}
-                      size="sm"
-                    >
-                      {scopeOption.scope} ({scopeOption.count > 0 ? '~' + scopeOption.count : '0'})
-                    </Button>
-                  ))}
-                </div>
-              </Form.Group>
-            )}
-
-            {/* Custom Scope Modal */}
-            <Modal show={showCustomScopeModal} onHide={() => setShowCustomScopeModal(false)}>
-              <Modal.Header closeButton>
-                <Modal.Title>Enter Custom Scope</Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                <Form.Group>
-                  <Form.Label>Scope Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={customScopeInput}
-                    onChange={handleCustomScopeChange}
-                    placeholder="enter scope name"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleCustomScopeSubmit();
-                      }
-                    }}
-                  />
-                </Form.Group>
-              </Modal.Body>
-              <Modal.Footer>
-                <ModalButton variant="secondary" onClick={() => setShowCustomScopeModal(false)}>
-                  Cancel
-                </ModalButton>
-                <ModalButton variant="primary" onClick={handleCustomScopeSubmit}>
-                  Try Scope
-                </ModalButton>
-              </Modal.Footer>
-            </Modal>
-          </Form>
-
-          {/* Add search form */}
-          {isSearchable && rows.length > 0 && (
-            <Form onSubmit={handleSearch} className="mt-3">
-              <Form.Group className="d-flex gap-2">
-                <Form.Control
-                  type="text"
-                  placeholder={`search by ${searchField}`}
-                  value={searchKey}
-                  onChange={handleSearchKeyChange}
-                />
-                <Button type="submit" variant="primary" disabled={isLoading}>
-                  Search
-                </Button>
-                {searchKey && (
-                  <Button 
-                    variant="secondary" 
-                    onClick={clearSearch}
-                    disabled={isLoading}
-                  >
-                    Clear
-                  </Button>
-                )}
-              </Form.Group>
-              <Form.Text className="text-muted">
-                Enter exact {searchField} to search
-              </Form.Text>
-            </Form>
-          )}
-
-          <div className="table-container">
-            {isLoading ? (
-              <div className="text-center p-4">
-                <Spinner animation="border" role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </Spinner>
-              </div>
-            ) : selectedTable && scope && rows.length === 0 && !error ? (
-              <Alert variant="warning" className="mb-3">
-                <div>No data found in scope "{scope}". You can verify using:</div>
-                <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                  curl -X POST {getApiEndpoint()}/v1/chain/get_table_rows \{'\n'}
-                    -H "Content-Type: application/json" \{'\n'}
-                    -d '{JSON.stringify({
-                      code: accountName,
-                      table: selectedTable,
-                      scope: scope,
-                      limit: limit,
-                      json: true,
-                      reverse: true
-                    }, null, 2)}'
-                </code>
-              </Alert>
-            ) : rows.length > 0 ? (
-              <div className="table-responsive mt-3">
-                <table className="table table-striped table-sm">
-                  <thead>
-                    <tr>
-                      {Object.keys(rows[0]).map((key) => (
-                        <th key={key}>{key}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, index) => (
-                      <tr key={index}>
-                        {Object.values(row).map((value, idx) => (
-                          <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
-                            {formatCellValue(value)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Add warning message display */}
-          {warningMessage && (
-            <div className="alert alert-warning mt-4">
-              <i className="bi bi-exclamation-triangle me-2"></i>
-              {warningMessage}
-            </div>
-          )}
-
-          {error && !isLoading && (
-            <div className="alert alert-danger mt-4">
-              {error}
-            </div>
-          )}
-
-          {isLoading ? (
-            <div className="text-center mt-4">
-              <Spinner animation="border" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </Spinner>
-            </div>
-          ) : (
-            <div className="mt-4">
-              {/* Your table and other content here */}
-              {rows.length > 0 ? (
+            {/* Only show table content when view is 'tables' */}
+            {view === 'tables' ? (
                 <>
-                  {/* Your existing table rendering code */}
+                    {/* Table Selection */}
+                    {tables.length > 0 && (
+                        <div className="mb-3">
+                            <label className="form-label">Table</label>
+                            <div className="d-flex gap-2 flex-wrap">
+                                {tables.map(table => (
+                                    <Button
+                                        key={table}
+                                        variant={selectedTable === table ? "primary" : "outline-primary"}
+                                        onClick={() => handleTableSelect({ target: { value: table } })}
+                                        className="mb-2"
+                                    >
+                                        {table}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scope Selection */}
+                    {selectedTable && scopes.length > 0 && (
+                        <div className="mb-3">
+                            <label className="form-label">Scope</label>
+                            <div className="d-flex gap-2 flex-wrap">
+                                {scopes.map(scopeData => (
+                                    <Button
+                                        key={scopeData.scope}
+                                        variant={scope === scopeData.scope ? "primary" : "outline-primary"}
+                                        onClick={() => handleScopeChange(scopeData.scope)}
+                                        className="mb-2"
+                                    >
+                                        {scopeData.scope}
+                                        {scopeData.count > 0 && ` (${scopeData.count})`}
+                                    </Button>
+                                ))}
+                                <Button
+                                    variant="outline-secondary"
+                                    onClick={() => setShowCustomScopeModal(true)}
+                                    className="mb-2"
+                                >
+                                    Custom Scope
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Search Form */}
+                    {isSearchable && rows.length > 0 && (
+                        <div className="mt-3">
+                            <div className="d-flex gap-2">
+                                <Form.Control
+                                    type="text"
+                                    placeholder={`search by ${searchField}`}
+                                    value={searchKey}
+                                    onChange={handleSearchKeyChange}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleSearch(e);
+                                        }
+                                    }}
+                                />
+                                <Button 
+                                    variant="primary" 
+                                    onClick={handleSearch}
+                                    disabled={isLoading}
+                                >
+                                    Search
+                                </Button>
+                                {searchKey && (
+                                    <Button 
+                                        variant="secondary" 
+                                        onClick={clearSearch}
+                                        disabled={isLoading}
+                                    >
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
+                            <Form.Text className="text-muted">
+                                Enter exact {searchField} to search
+                            </Form.Text>
+                        </div>
+                    )}
+
+                    {/* Rest of table content */}
+                    <div className="table-container">
+                        {isLoading ? (
+                            <div className="text-center p-4">
+                                <Spinner animation="border" role="status">
+                                    <span className="visually-hidden">Loading...</span>
+                                </Spinner>
+                            </div>
+                        ) : selectedTable && scope && rows.length === 0 && !error ? (
+                            <Alert variant="warning" className="mb-3">
+                                <div>No data found in scope "{scope}". You can verify using:</div>
+                                <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+                                    curl -X POST {getApiEndpoint()}/v1/chain/get_table_rows \{'\n'}
+                                    -H "Content-Type: application/json" \{'\n'}
+                                    -d '{JSON.stringify({
+                                        code: accountName,
+                                        table: selectedTable,
+                                        scope: scope,
+                                        limit: limit,
+                                        json: true,
+                                        reverse: true
+                                    }, null, 2)}'
+                                </code>
+                            </Alert>
+                        ) : rows.length > 0 ? (
+                            <>
+                                <div className="table-responsive mt-3">
+                                    <table className="table table-striped table-sm">
+                                        <thead>
+                                            <tr>
+                                                {Object.keys(rows[0]).map((key) => (
+                                                    <th key={key}>{key}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {rows.map((row, index) => (
+                                                <tr key={index}>
+                                                    {Object.values(row).map((value, idx) => (
+                                                        <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                                                            {formatCellValue(value)}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination Controls */}
+                                <div className="d-flex justify-content-between align-items-center mt-3">
+                                    <div>
+                                        {currentPage > 0 && (
+                                            <Button
+                                                variant="outline-primary"
+                                                onClick={() => fetchTableRows('backward')}
+                                                disabled={isLoading || currentPage === 0}
+                                            >
+                                                Previous
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className="text-muted">
+                                        Page {currentPage + 1}
+                                    </div>
+                                    <div>
+                                        {nextKey && (
+                                            <Button
+                                                variant="outline-primary"
+                                                onClick={() => fetchTableRows('forward')}
+                                                disabled={isLoading}
+                                            >
+                                                Next
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
+
+                    {/* Warning message for tables view */}
+                    {warningMessage && (
+                        <div className="alert alert-warning mt-4">
+                            <i className="bi bi-exclamation-triangle me-2"></i>
+                            {warningMessage}
+                        </div>
+                    )}
+
+                    {/* Custom Scope Modal */}
+                    <Modal show={showCustomScopeModal} onHide={() => setShowCustomScopeModal(false)}>
+                        <Modal.Header closeButton>
+                            <Modal.Title>Enter Custom Scope</Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                            <input
+                                type="text"
+                                className="form-control"
+                                value={customScopeInput}
+                                onChange={handleCustomScopeChange}
+                                placeholder="Enter scope"
+                            />
+                        </Modal.Body>
+                        <Modal.Footer>
+                            <Button variant="secondary" onClick={() => setShowCustomScopeModal(false)}>
+                                Cancel
+                            </Button>
+                            <Button variant="primary" onClick={handleCustomScopeSubmit}>
+                                Apply
+                            </Button>
+                        </Modal.Footer>
+                    </Modal>
                 </>
-              ) : null}
-            </div>
-          )}
+            ) : (
+                <>
+                    <ActionsList actions={actions} abiData={abiData} />
+                    {/* Debug output */}
+                    <pre style={{display: 'none'}}>
+                        {JSON.stringify({
+                            hasAbiData: !!abiData,
+                            abiDataContent: abiData,
+                            actionsLength: actions.length,
+                            firstAction: actions[0],
+                        }, null, 2)}
+                    </pre>
+                </>
+            )}
+
+            {/* Error message stays outside since it's relevant for both views */}
+            {error && !isLoading && (
+                <div className="alert alert-danger mt-4">
+                    {error}
+                </div>
+            )}
+          </Form>
         </div>
       </div>
     </div>

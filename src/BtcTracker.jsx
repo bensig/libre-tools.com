@@ -8,6 +8,16 @@ const isValidHash = (hash) => {
   return hashRegex.test(hash);
 };
 
+const truncateHash = (hash) => {
+  if (!hash) return '';
+  return `${hash.slice(0, 4)}-${hash.slice(-4)}`;
+};
+
+const truncateAddress = (address) => {
+  if (!address) return '';
+  return `${address.slice(0, 5)}-${address.slice(-5)}`;
+};
+
 const BtcTracker = () => {
   const [hash, setHash] = useState('');
   const [result, setResult] = useState(null);
@@ -314,7 +324,6 @@ const BtcTracker = () => {
                 <p><strong>Amount:</strong> {result.amount}</p>
                 
                 {result.type === 'peg-out' ? (
-                  // Peg-out order: Libre Hash, Bitcoin Hash, Bitcoin Address
                   <>
                     {result.libreHash && (
                       <p>
@@ -325,7 +334,7 @@ const BtcTracker = () => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
                         >
-                          {result.libreHash}
+                          {truncateHash(result.libreHash)}
                         </a>
                         {(result.libreTimestamp || result.blockTime) && (
                           <span className="text-muted ms-2">
@@ -344,7 +353,7 @@ const BtcTracker = () => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
                         >
-                          {result.btcHash}
+                          {truncateHash(result.btcHash)}
                         </a>
                         {result.btcTimestamp && <span className="text-muted ms-2">({result.btcTimestamp})</span>}
                       </p>
@@ -359,13 +368,12 @@ const BtcTracker = () => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
                         >
-                          {result.btcAddress}
+                          {truncateAddress(result.btcAddress)}
                         </a>
                       </p>
                     )}
                   </>
                 ) : (
-                  // Keep original order for peg-in
                   <>
                     {result.btcHash && (
                       <p>
@@ -376,7 +384,7 @@ const BtcTracker = () => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
                         >
-                          {result.btcHash}
+                          {truncateHash(result.btcHash)}
                         </a>
                         {result.btcTimestamp && <span className="text-muted ms-2">({result.btcTimestamp})</span>}
                       </p>
@@ -391,7 +399,7 @@ const BtcTracker = () => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
                         >
-                          {result.libreHash}
+                          {truncateHash(result.libreHash)}
                         </a>
                         {result.libreTimestamp && <span className="text-muted ms-2">({result.libreTimestamp})</span>}
                       </p>

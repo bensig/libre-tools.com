@@ -47,9 +47,14 @@ export default function TransactionDownloader() {
     return cleanUrl;
   };
 
-  const fetchData = async (url, skip = 0, formattedData = []) => {
+  const fetchData = async (url, network, skip = 0, formattedData = []) => {
     try {
-      const baseEndpoint = getApiEndpoint();
+      const baseEndpoint = network === 'custom' 
+        ? formatEndpoint(customEndpoint)
+        : NETWORK_ENDPOINTS[network];
+      
+      console.log('Using endpoint:', baseEndpoint, 'Network:', network);
+      
       const response = await fetch(`${baseEndpoint}${url}&skip=${skip * 1000}`);
       const data = await response.json();
       
@@ -65,7 +70,7 @@ export default function TransactionDownloader() {
       );
 
       if (data.actions.length === 1000) {
-        return fetchData(url, skip + 1, newFormattedData);
+        return fetchData(url, network, skip + 1, newFormattedData);
       }
 
       return newFormattedData;
@@ -77,7 +82,7 @@ export default function TransactionDownloader() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
-    setLoading(false);
+    setLoading(true);
     setDownloadData(null);
 
     try {
@@ -102,7 +107,7 @@ export default function TransactionDownloader() {
 
       console.log('Fetching from URL:', url);
 
-      const formattedData = await fetchData(url);
+      const formattedData = await fetchData(url, network);
       
       const { sentAmounts, receivedAmounts } = calculateTotals(formattedData, formData.account);
       
@@ -177,6 +182,60 @@ export default function TransactionDownloader() {
     return true;
   };
 
+  const handleNetworkChange = (newNetwork) => {
+    setNetwork(newNetwork);
+    if (formData.account) {
+      const submitWithNewNetwork = async () => {
+        try {
+          setError(null);
+          setLoading(true);
+          setDownloadData(null);
+
+          if (formData.afterDate && formData.beforeDate && 
+              new Date(formData.afterDate) >= new Date(formData.beforeDate)) {
+            throw new Error('After Date must be earlier than Before Date');
+          }
+
+          const beforeDate = formData.beforeDate 
+            ? new Date(formData.beforeDate).toISOString().split('T')[0] + 'T00:00:00Z'
+            : '';
+          const afterDate = formData.afterDate
+            ? new Date(formData.afterDate).toISOString().split('T')[0] + 'T00:00:00Z'
+            : '';
+
+          let url = `/v2/history/get_actions?limit=1000&account=${formData.account}`;
+          if (afterDate) url += `&after=${afterDate}`;
+          if (beforeDate) url += `&before=${beforeDate}`;
+          if (formData.filterContractAction && formData.contract && formData.action) {
+            url += `&filter=${formData.contract}%3A${formData.action}`;
+          }
+
+          console.log('Current network:', newNetwork);
+          console.log('Fetching from URL:', url);
+
+          const formattedData = await fetchData(url, newNetwork);
+          
+          const { sentAmounts, receivedAmounts } = calculateTotals(formattedData, formData.account);
+          
+          setDownloadData({
+            transactions: formattedData,
+            sentAmounts,
+            receivedAmounts,
+            totalTransactions: formattedData.length
+          });
+
+        } catch (error) {
+          console.error('Error:', error);
+          setError(error.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      setTimeout(submitWithNewNetwork, 0);
+    }
+  };
+
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
@@ -192,7 +251,7 @@ export default function TransactionDownloader() {
             <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
               <NetworkSelector
                 network={network}
-                setNetwork={setNetwork}
+                setNetwork={handleNetworkChange}
                 customEndpoint={customEndpoint}
                 setCustomEndpoint={setCustomEndpoint}
                 customEndpointError={customEndpointError}
