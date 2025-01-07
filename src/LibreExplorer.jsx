@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
+import NetworkSelector from './components/NetworkSelector';
 
 const LibreExplorer = () => {
   const NETWORK_ENDPOINTS = {
@@ -48,6 +49,7 @@ const LibreExplorer = () => {
   // Define global function in useEffect
   useEffect(() => {
     window.handleExampleClick = (account) => {
+      setError(null);  // Clear the error state
       setAccountName(account);
       setTimeout(() => fetchTables(), 0);
     };
@@ -58,9 +60,21 @@ const LibreExplorer = () => {
     };
   }, []); // Empty dependency array means this runs once on mount
 
-  const getApiEndpoint = (baseUrl) => {
-    const cleanUrl = baseUrl.replace(/\/$/, '');
-    return `${cleanUrl}/v1/chain`;
+  // Add this useEffect to watch network changes
+  useEffect(() => {
+    if (accountName) {
+      fetchTables();
+    }
+  }, [network, customEndpoint]); // Trigger when network or customEndpoint changes
+
+  const getApiEndpoint = () => {
+    if (network === 'custom') {
+      if (!customEndpoint) {
+        throw new Error('Custom endpoint is required');
+      }
+      return formatEndpoint(customEndpoint);
+    }
+    return NETWORK_ENDPOINTS[network];
   };
 
   const formatEndpoint = (url) => {
@@ -86,10 +100,9 @@ const LibreExplorer = () => {
     }
   };
 
-  const fetchWithCorsHandling = async (baseEndpoint, path, options = {}) => {
+  const fetchWithCorsHandling = async (path, options = {}) => {
     try {
-      const formattedEndpoint = formatEndpoint(baseEndpoint);
-      const apiEndpoint = getApiEndpoint(formattedEndpoint);
+      const apiEndpoint = getApiEndpoint();
       const url = `${apiEndpoint}${path}`;
       console.log('Fetching from:', url);
       
@@ -102,6 +115,9 @@ const LibreExplorer = () => {
       });
       
       if (!response.ok) {
+        if (response.status === 400) {
+          throw new Error('Account not found - are you on the right network?');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -137,8 +153,7 @@ const LibreExplorer = () => {
       // Get ABI tables
       console.log('Fetching ABI...');
       const abiResponse = await fetchWithCorsHandling(
-        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
-        '/get_abi',
+        '/v1/chain/get_abi',
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -148,11 +163,27 @@ const LibreExplorer = () => {
       const abiData = await abiResponse.json();
       
       if (!abiData.abi || abiData.error) {
-        const exampleLinks = EXAMPLE_ACCOUNTS.map(account => 
-          `<a href="#" class="text-primary" onclick="event.preventDefault(); handleExampleClick('${account}')">${account}</a>`
-        ).join(', ');
-        
-        throw new Error(`No smart contract found on this account - try one of these: ${exampleLinks}`);
+        setError(
+          <div>
+            No smart contract found on this account - try one of these:{' '}
+            {EXAMPLE_ACCOUNTS.map((account, index) => (
+              <span key={account}>
+                <a 
+                  href="#" 
+                  className="text-primary"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.handleExampleClick(account);
+                  }}
+                >
+                  {account}
+                </a>
+                {index < EXAMPLE_ACCOUNTS.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+          </div>
+        );
+        return;
       }
       
       const abiTables = abiData.abi?.tables || [];
@@ -161,8 +192,7 @@ const LibreExplorer = () => {
       // Get scope data
       console.log('Fetching scope data...');
       const scopeResponse = await fetchWithCorsHandling(
-        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
-        '/get_table_by_scope',
+        '/v1/chain/get_table_by_scope',
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -255,8 +285,7 @@ const LibreExplorer = () => {
       // Get all scopes for this table from the initial scope data
       console.log('Fetching scope data for table:', table);
       const response = await fetchWithCorsHandling(
-        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
-        `/get_table_by_scope`,
+        '/v1/chain/get_table_by_scope',
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -306,6 +335,15 @@ const LibreExplorer = () => {
       
       console.log('Selected scope:', bestScope);
       setScope(bestScope);
+
+      // Add warning about row count discrepancy
+      const selectedScopeData = scopeList.find(s => s.scope === bestScope);
+      if (selectedScopeData && selectedScopeData.count > 0) {
+        setWarningMessage(
+          `Note: The scope shows ${selectedScopeData.count} total rows, but this includes both active and deleted rows. ` +
+          `The table below shows only active rows.`
+        );
+      }
       
       // Use the current table value directly
       await fetchTableRows('forward', bestScope, table);
@@ -316,7 +354,13 @@ const LibreExplorer = () => {
   };
 
   const handleAccountSubmit = (e) => {
-    e.preventDefault(); // Prevent form submission
+    e.preventDefault();
+    
+    if (!isValidLibreAccount(accountName)) {
+      setError('Invalid account name. Must be 1-12 characters, only a-z, 1-5, and dots allowed.');
+      return;
+    }
+    
     fetchTables();
   };
 
@@ -341,18 +385,15 @@ const LibreExplorer = () => {
   };
 
   const fetchTableRows = async (direction = 'forward', scopeOverride = null, tableOverride = null, append = false) => {
-    console.log('=== fetchTableRows called ===');
-    console.log('Direction:', direction);
-    console.log('Scope override:', scopeOverride);
-    console.log('Append:', append);
+    // Show loading state immediately
+    setIsLoading(true);
+    setError(null);  // Clear any previous errors
     
     const currentScope = scopeOverride || scope;
     const currentTable = tableOverride || selectedTable;
     
-    console.log('Current state - Table:', currentTable, 'Scope:', currentScope);
-    
     if (!currentTable || !currentScope) {
-      console.log('Missing table or scope, returning');
+      setIsLoading(false);
       return;
     }
 
@@ -363,7 +404,7 @@ const LibreExplorer = () => {
         scope: currentScope,
         limit: limit,
         json: true,
-        reverse: direction === 'backward'
+        reverse: true
       };
 
       // Handle search parameters if searching
@@ -373,16 +414,14 @@ const LibreExplorer = () => {
       } else if (isInitialLoad) {
         // Don't add any bounds for initial load
       } else if (direction === 'forward' && nextKey) {
-        params.lower_bound = nextKey;
+        params.upper_bound = nextKey;
       } else if (direction === 'backward' && previousKeys.length > 0 && currentPage > 0) {
-        params.upper_bound = previousKeys[previousKeys.length - 1];
+        params.lower_bound = previousKeys[previousKeys.length - 1];
       }
 
       console.log('Fetching rows with params:', params);
-      const apiEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
       const response = await fetchWithCorsHandling(
-        apiEndpoint,
-        `/get_table_rows`,
+        '/v1/chain/get_table_rows',
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -398,17 +437,8 @@ const LibreExplorer = () => {
       }
 
       if (!data.rows || data.rows.length === 0) {
-        if (isSearching) {
-          setWarningMessage(`No results found for ${searchField}: "${searchKey}"`);
-        } else {
-          const apiEndpoint = network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network];
-          const curlCommand = `curl -X POST ${apiEndpoint}/v1/chain/get_table_rows -H "Content-Type: application/json" -d '${JSON.stringify(params)}'`;
-          setWarningMessage(`No data found in scope "${currentScope}". You can verify using:\n${curlCommand}`);
-        }
         setRows([]);
         return;
-      } else {
-        setWarningMessage(null);
       }
 
       if (isInitialLoad) {
@@ -450,11 +480,7 @@ const LibreExplorer = () => {
       }
     } catch (error) {
       console.error('Error in fetchTableRows:', error);
-      if (error.message.includes('CORS')) {
-        setError('CORS error: Unable to access API. Please try a different endpoint or use a CORS proxy.');
-      } else {
-        setError(error.message);
-      }
+      setError(error.message);
       setRows([]);
     } finally {
       setIsLoading(false);
@@ -514,17 +540,6 @@ const LibreExplorer = () => {
     setWarningMessage(null);
     setError(null);
 
-    // If we have more than 1000 rows, reset to first 100
-    if (rows.length > 1000) {
-      setRows([]);
-      setCurrentPage(0);
-      setPreviousKeys([]);
-      setNextKey(null);
-      await fetchTableRows('forward');
-      return;
-    }
-
-    // Otherwise refresh current view
     try {
       const params = {
         code: accountName,
@@ -534,16 +549,7 @@ const LibreExplorer = () => {
         json: true
       };
 
-      // Add search params if searching
-      if (searchKey && searchField) {
-        params.lower_bound = searchKey;
-        params.upper_bound = searchKey;
-      }
-
-      console.log('Refreshing with params:', params);
-      
       const response = await fetchWithCorsHandling(
-        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
         `/get_table_rows`,
         {
           method: "POST",
@@ -555,8 +561,7 @@ const LibreExplorer = () => {
       const data = await response.json();
       
       if (!data.rows || data.rows.length === 0) {
-        setWarningMessage(`No data found in scope "${scope}"`);
-        setRows([]);
+        setRows([]);  // Just clear the rows without setting a warning
       } else {
         setRows(data.rows);
         setNextKey(data.next_key);
@@ -572,21 +577,13 @@ const LibreExplorer = () => {
   // Update clear search function to explicitly fetch new data
   const clearSearch = async () => {
     setIsLoading(true);
-    
-    // Clear search state
     setSearchKey('');
     setIsSearching(false);
-    
-    // Clear pagination state
     setCurrentPage(0);
     setPreviousKeys([]);
     setNextKey(null);
-    
-    // Clear any errors or warnings
     setWarningMessage(null);
     setError(null);
-    
-    // Clear rows to show loading state
     setRows([]);
     
     try {
@@ -598,10 +595,7 @@ const LibreExplorer = () => {
         json: true
       };
       
-      console.log('Clearing search, fetching with params:', params);
-      
       const response = await fetchWithCorsHandling(
-        network === 'custom' ? customEndpoint : NETWORK_ENDPOINTS[network],
         `/get_table_rows`,
         {
           method: "POST",
@@ -613,8 +607,7 @@ const LibreExplorer = () => {
       const data = await response.json();
       
       if (!data.rows || data.rows.length === 0) {
-        setWarningMessage(`No data found in scope "${scope}"`);
-        setRows([]);
+        setRows([]);  // Just clear the rows without setting a warning
       } else {
         setRows(data.rows);
         setNextKey(data.next_key);
@@ -649,8 +642,7 @@ const LibreExplorer = () => {
 
     try {
       const response = await fetchWithCorsHandling(
-        baseEndpoint,
-        '/get_abi',
+        `/get_abi`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -670,7 +662,8 @@ const LibreExplorer = () => {
 
   // Add lowercase enforcement to account name input
   const handleAccountNameChange = (e) => {
-    setAccountName(e.target.value.toLowerCase());
+    const value = e.target.value.toLowerCase();
+    setAccountName(value);
   };
 
   // Add lowercase enforcement to custom scope input
@@ -683,315 +676,280 @@ const LibreExplorer = () => {
     setSearchKey(e.target.value.toLowerCase());
   };
 
+  // Add this validation function
+  const isValidLibreAccount = (account) => {
+    if (!account) return false;
+    
+    // Check length (1-12 characters)
+    if (account.length < 1 || account.length > 12) return false;
+    
+    // Check for valid characters only (a-z, 1-5, .)
+    if (!/^[a-z1-5.]+$/.test(account)) return false;
+    
+    // Cannot start or end with a dot
+    if (account.startsWith('.') || account.endsWith('.')) return false;
+    
+    // Cannot have multiple consecutive dots
+    if (account.includes('..')) return false;
+    
+    return true;
+  };
+
   return (
-    <div className="max-w-xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Libre Table Explorer</h1>
-      
-      <div className="alert alert-info mb-4">
-        Easily view the contents of any smart contract tables on Libre. It will automatically give you a list of table scopes - try {' '}
-        <a href="#" className="text-primary" onClick={(e) => {
-          e.preventDefault();
-          window.handleExampleClick('dex.libre');
-        }}>dex.libre</a>, {' '}
-        <a href="#" className="text-primary" onClick={(e) => {
-          e.preventDefault();
-          window.handleExampleClick('x.libre');
-        }}>x.libre</a>, {' '}
-        <a href="#" className="text-primary" onClick={(e) => {
-          e.preventDefault();
-          window.handleExampleClick('mining.libre');
-        }}>mining.libre</a>, {' '}
-        <a href="#" className="text-primary" onClick={(e) => {
-          e.preventDefault();
-          window.handleExampleClick('loan');
-        }}>loan</a>
-      </div>
-
-      <Form className="mb-4">
-        <Form.Group className="mb-3">
-          <Form.Label>Network</Form.Label>
-          <Form.Select
-            value={network}
-            onChange={(e) => {
-              setNetwork(e.target.value);
-              setCustomEndpointError('');
-              if (e.target.value === 'custom') {
-                setShowCustomEndpoint(true);
-              } else {
-                setShowCustomEndpoint(false);
-                setCustomEndpoint('');
-              }
-            }}
-          >
-            <option value="mainnet">Mainnet</option>
-            <option value="testnet">Testnet</option>
-            <option value="custom">Custom Endpoint</option>
-          </Form.Select>
-          {showCustomEndpoint && (
-            <div className="mt-2">
-              <Form.Control
-                type="text"
-                placeholder="Enter API endpoint (e.g., api.example.com)"
-                value={customEndpoint}
-                onChange={(e) => {
-                  setCustomEndpoint(e.target.value);
-                  setCustomEndpointError('');
-                }}
-                isInvalid={!!customEndpointError}
-              />
-              <Form.Control.Feedback type="invalid">
-                {customEndpointError}
-              </Form.Control.Feedback>
-              <Form.Text className="text-muted">
-                HTTPS will be used by default if protocol is not specified
-              </Form.Text>
+    <div className="container-fluid">
+      <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
+        <div style={{ maxWidth: '800px', width: '100%' }}>
+          <h2 className="text-3xl font-bold mb-6">Smart Contract Explorer</h2>
+          
+          <div className="alert alert-info mb-4 d-flex">
+            <i className="bi bi-info-circle me-2"></i>
+            <div>
+              Enter a contract account name to explore its tables and data
+              <div className="mt-2">
+                Try one of these examples:{' '}
+                {EXAMPLE_ACCOUNTS.map((account, index) => (
+                  <span key={account}>
+                    <a 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.handleExampleClick(account);
+                      }}
+                    >
+                      {account}
+                    </a>
+                    {index < EXAMPLE_ACCOUNTS.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+              </div>
             </div>
-          )}
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>Account Name</Form.Label>
-          <div className="d-flex gap-2">
-            <Form.Control
-              type="text"
-              name="accountName"
-              value={accountName}
-              onChange={handleAccountNameChange}
-              placeholder="enter account name"
-              autoFocus
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  fetchTables();
-                }
-              }}
-            />
-            <Button 
-              variant="primary"
-              onClick={fetchTables}
-              disabled={isLoading}
-            >
-              {isLoading ? <Spinner size="sm" /> : 'Fetch Tables'}
-            </Button>
           </div>
-        </Form.Group>
 
-        {tables.length > 0 && (
-          <Form.Group className="mb-3">
-            <Form.Label>Tables</Form.Label>
-            <div className="d-flex flex-wrap gap-2">
-              {tables.map((table) => (
-                <Button
-                  key={table}
-                  variant={selectedTable === table ? "primary" : "outline-primary"}
-                  onClick={() => handleTableSelect({ target: { value: table } })}
-                  size="sm"
-                >
-                  {table}
-                </Button>
-              ))}
-            </div>
-          </Form.Group>
-        )}
-
-        {selectedTable && scopes.length > 0 && (
-          <Form.Group className="mb-3">
-            <Form.Label>Scopes</Form.Label>
-            <div className="d-flex flex-wrap gap-2">
-              {scopes.map((scopeOption) => (
-                <Button
-                  key={scopeOption.scope}
-                  variant={scope === scopeOption.scope ? "primary" : "outline-primary"}
-                  onClick={() => handleScopeChange(scopeOption.scope)}
-                  size="sm"
-                >
-                  {scopeOption.scope} ({scopeOption.count})
-                </Button>
-              ))}
-            </div>
-          </Form.Group>
-        )}
-
-        {/* Custom Scope Modal */}
-        <Modal show={showCustomScopeModal} onHide={() => setShowCustomScopeModal(false)}>
-          <Modal.Header closeButton>
-            <Modal.Title>Enter Custom Scope</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            <Form.Group>
-              <Form.Label>Scope Name</Form.Label>
-              <Form.Control
-                type="text"
-                value={customScopeInput}
-                onChange={handleCustomScopeChange}
-                placeholder="enter scope name"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleCustomScopeSubmit();
-                  }
-                }}
+          <Form onSubmit={handleAccountSubmit}>
+            <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
+              <NetworkSelector
+                network={network}
+                setNetwork={setNetwork}
+                customEndpoint={customEndpoint}
+                setCustomEndpoint={setCustomEndpoint}
+                customEndpointError={customEndpointError}
+                setCustomEndpointError={setCustomEndpointError}
               />
             </Form.Group>
-          </Modal.Body>
-          <Modal.Footer>
-            <ModalButton variant="secondary" onClick={() => setShowCustomScopeModal(false)}>
-              Cancel
-            </ModalButton>
-            <ModalButton variant="primary" onClick={handleCustomScopeSubmit}>
-              Try Scope
-            </ModalButton>
-          </Modal.Footer>
-        </Modal>
-      </Form>
 
-      {/* Add search form */}
-      {isSearchable && rows.length > 0 && (
-        <Form onSubmit={handleSearch} className="mt-3">
-          <Form.Group className="d-flex gap-2">
-            <Form.Control
-              type="text"
-              placeholder={`search by ${searchField}`}
-              value={searchKey}
-              onChange={handleSearchKeyChange}
-            />
-            <Button type="submit" variant="primary" disabled={isLoading}>
-              Search
-            </Button>
-            {searchKey && (
-              <Button 
-                variant="secondary" 
-                onClick={clearSearch}
-                disabled={isLoading}
-              >
-                Clear
-              </Button>
-            )}
-          </Form.Group>
-          <Form.Text className="text-muted">
-            Enter exact {searchField} to search
-          </Form.Text>
-        </Form>
-      )}
-
-      <div className="table-container">
-        {isLoading ? (
-          <div className="text-center p-4">
-            <Spinner animation="border" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </Spinner>
-          </div>
-        ) : isSearching ? (
-          <div className="fade mb-3 alert alert-info show">
-            Searching for {searchField}: "{searchKey}"...
-          </div>
-        ) : (
-          <>
-            {warningMessage && (
-              <div className="fade mb-3 alert alert-warning show">
-                <pre>{warningMessage}</pre>
+            <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
+              <Form.Label>Smart Contract Account Name</Form.Label>
+              <div>
+                <div className="d-flex gap-2 mb-1">
+                  <Form.Control
+                    type="text"
+                    name="accountName"
+                    value={accountName}
+                    onChange={handleAccountNameChange}
+                    isInvalid={accountName && !isValidLibreAccount(accountName)}
+                    placeholder="e.g. dex.libre"
+                    autoFocus
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAccountSubmit(e);
+                      }
+                    }}
+                  />
+                  <Button 
+                    variant="primary"
+                    onClick={fetchTables}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? <Spinner size="sm" /> : 'Fetch Tables'}
+                  </Button>
+                </div>
+                {accountName && !isValidLibreAccount(accountName) && (
+                  <div className="text-danger small">
+                    Invalid account name. Must be 1-12 characters, only a-z, 1-5, and dots allowed.
+                  </div>
+                )}
               </div>
+            </Form.Group>
+
+            {tables.length > 0 && (
+              <Form.Group className="mb-3">
+                <Form.Label>Tables</Form.Label>
+                <div className="d-flex flex-wrap gap-2">
+                  {tables.map((table) => (
+                    <Button
+                      key={table}
+                      variant={selectedTable === table ? "primary" : "outline-primary"}
+                      onClick={() => handleTableSelect({ target: { value: table } })}
+                      size="sm"
+                    >
+                      {table}
+                    </Button>
+                  ))}
+                </div>
+              </Form.Group>
             )}
 
-            {error && !warningMessage && (
-              <div 
-                className="alert alert-danger mt-3"
-                dangerouslySetInnerHTML={{ __html: error }}
-              />
+            {selectedTable && scopes.length > 0 && (
+              <Form.Group className="mb-3">
+                <Form.Label>Scopes</Form.Label>
+                <div className="d-flex flex-wrap gap-2">
+                  {scopes.map((scopeOption) => (
+                    <Button
+                      key={scopeOption.scope}
+                      variant={scope === scopeOption.scope ? "primary" : "outline-primary"}
+                      onClick={() => handleScopeChange(scopeOption.scope)}
+                      size="sm"
+                    >
+                      {scopeOption.scope} ({scopeOption.count > 0 ? '~' + scopeOption.count : '0'})
+                    </Button>
+                  ))}
+                </div>
+              </Form.Group>
             )}
 
-            {selectedTable && scope && rows.length === 0 ? (
+            {/* Custom Scope Modal */}
+            <Modal show={showCustomScopeModal} onHide={() => setShowCustomScopeModal(false)}>
+              <Modal.Header closeButton>
+                <Modal.Title>Enter Custom Scope</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <Form.Group>
+                  <Form.Label>Scope Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={customScopeInput}
+                    onChange={handleCustomScopeChange}
+                    placeholder="enter scope name"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCustomScopeSubmit();
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Modal.Body>
+              <Modal.Footer>
+                <ModalButton variant="secondary" onClick={() => setShowCustomScopeModal(false)}>
+                  Cancel
+                </ModalButton>
+                <ModalButton variant="primary" onClick={handleCustomScopeSubmit}>
+                  Try Scope
+                </ModalButton>
+              </Modal.Footer>
+            </Modal>
+          </Form>
+
+          {/* Add search form */}
+          {isSearchable && rows.length > 0 && (
+            <Form onSubmit={handleSearch} className="mt-3">
+              <Form.Group className="d-flex gap-2">
+                <Form.Control
+                  type="text"
+                  placeholder={`search by ${searchField}`}
+                  value={searchKey}
+                  onChange={handleSearchKeyChange}
+                />
+                <Button type="submit" variant="primary" disabled={isLoading}>
+                  Search
+                </Button>
+                {searchKey && (
+                  <Button 
+                    variant="secondary" 
+                    onClick={clearSearch}
+                    disabled={isLoading}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Form.Group>
+              <Form.Text className="text-muted">
+                Enter exact {searchField} to search
+              </Form.Text>
+            </Form>
+          )}
+
+          <div className="table-container">
+            {isLoading ? (
+              <div className="text-center p-4">
+                <Spinner animation="border" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </Spinner>
+              </div>
+            ) : selectedTable && scope && rows.length === 0 && !error ? (
               <Alert variant="warning" className="mb-3">
-                <pre style={{ whiteSpace: 'pre-wrap', marginBottom: 0, fontSize: '0.9em' }}>
-                  No data found in scope "{scope}" for table "{selectedTable}".
-                </pre>
+                <div>No data found in scope "{scope}". You can verify using:</div>
+                <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+                  curl -X POST {getApiEndpoint()}/v1/chain/get_table_rows \{'\n'}
+                    -H "Content-Type: application/json" \{'\n'}
+                    -d '{JSON.stringify({
+                      code: accountName,
+                      table: selectedTable,
+                      scope: scope,
+                      limit: limit,
+                      json: true,
+                      reverse: true
+                    }, null, 2)}'
+                </code>
               </Alert>
             ) : rows.length > 0 ? (
-              <>
-                <div className="table-responsive mt-3">
-                  <table className="table table-striped table-sm">
-                    <thead>
-                      <tr>
-                        {Object.keys(rows[0]).map((key) => (
-                          <th key={key}>{key}</th>
+              <div className="table-responsive mt-3">
+                <table className="table table-striped table-sm">
+                  <thead>
+                    <tr>
+                      {Object.keys(rows[0]).map((key) => (
+                        <th key={key}>{key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <tr key={index}>
+                        {Object.values(row).map((value, idx) => (
+                          <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                            {formatCellValue(value)}
+                          </td>
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, index) => (
-                        <tr key={index}>
-                          {Object.values(row).map((value, idx) => (
-                            <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
-                              {formatCellValue(value)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Pagination buttons */}
-                <div className="d-flex justify-content-between align-items-center mt-3">
-                  <div className="d-flex gap-2">
-                    {(!isInitialLoad && currentPage > 0 && firstKey) ? (
-                      <Button 
-                        variant="primary" 
-                        onClick={() => fetchTableRows('backward')}
-                        disabled={isLoading}
-                      >
-                        Previous
-                      </Button>
-                    ) : (
-                      <Button 
-                        variant="secondary" 
-                        disabled
-                      >
-                        Previous
-                      </Button>
-                    )}
-                    {nextKey ? (
-                      <Button 
-                        variant="primary" 
-                        onClick={() => fetchTableRows('forward')}
-                        disabled={isLoading}
-                      >
-                        Next
-                      </Button>
-                    ) : (
-                      <Button 
-                        variant="secondary" 
-                        disabled
-                      >
-                        Next
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {/* Action buttons on the right */}
-                  <div className="d-flex gap-2">
-                    <Button 
-                      variant="primary" 
-                      onClick={refreshCurrentView}
-                      disabled={isLoading}
-                    >
-                      Refresh Data
-                    </Button>
-                    {nextKey && (
-                      <Button 
-                        variant="primary" 
-                        onClick={() => fetchTableRows('forward', null, null, true)}
-                        disabled={isLoading}
-                      >
-                        Load More Rows
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : null}
-          </>
-        )}
+          </div>
+
+          {/* Add warning message display */}
+          {warningMessage && (
+            <div className="alert alert-warning mt-4">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              {warningMessage}
+            </div>
+          )}
+
+          {error && !isLoading && (
+            <div className="alert alert-danger mt-4">
+              {error}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="text-center mt-4">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
+          ) : (
+            <div className="mt-4">
+              {/* Your table and other content here */}
+              {rows.length > 0 ? (
+                <>
+                  {/* Your existing table rendering code */}
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

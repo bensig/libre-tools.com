@@ -52,9 +52,9 @@ yarn build
 
 ## Features
 
-- **Libre Table Explorer** - Browse and search contract tables
-- **Libre Transaction History** - Download transaction history as CSV
-
+- **Smart Contract Explorer** - Browse and search contract tables
+- **Transaction History** - Download transaction history as CSV
+- **BTC Tracker** - Track BTC peg in and out transactions
 
 ## License
 

@@ -1,60 +1,36 @@
+import { Link } from 'react-router-dom';
 import { Navbar, Nav, Container } from 'react-bootstrap';
-import { Link, useLocation } from 'react-router-dom';
-import libreLogo from '../assets/LibreLogo.png';
-import libreLogoLarge from '../assets/LibreLogo-large.png';
 
-export default function Layout({ children }) {
-  const location = useLocation();
-
+const Layout = ({ children }) => {
   return (
     <>
-      <Navbar bg="dark" variant="dark" expand="md">
-        <Container fluid>
+      <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
+        <Container>
           <Navbar.Brand as={Link} to="/">
             <img
-              src={libreLogo}
-              srcSet={`${libreLogo} 1x, ${libreLogoLarge} 2x`}
-              alt="LibreLogo"
-              height="20"
-              className="d-inline-block align-top"
+              src="/libre-favicon.png"
+              width="30"
+              height="30"
+              className="d-inline-block align-top me-2"
+              alt="Libre logo"
             />
+            Libre Tools
           </Navbar.Brand>
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav">
             <Nav className="me-auto">
-              <Nav.Link 
-                as={Link} 
-                to="/" 
-                active={location.pathname === '/'}
-              >
-                Table Explorer
-              </Nav.Link>
-              <Nav.Link 
-                as={Link} 
-                to="/transactions" 
-                active={location.pathname === '/transactions'}
-              >
-                Transaction Downloader
-              </Nav.Link>
+              <Nav.Link as={Link} to="/">Smart Contract Explorer</Nav.Link>
+              <Nav.Link as={Link} to="/transactions">Transaction History</Nav.Link>
+              <Nav.Link as={Link} to="/btc-tracker">BTC Tracker</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      <Container className="mt-4">
+      <Container>
         {children}
       </Container>
-      <footer className="text-center mt-5 mb-4">
-        <p>
-          Created by Quantumblok - please{' '}
-          <a 
-            href="https://dashboard.libre.org/validators" 
-            target="_blank" 
-            rel="noopener noreferrer"
-          >
-            vote for our Validator "quantum" on Libre
-          </a>
-        </p>
-      </footer>
     </>
   );
-} 
+};
+
+export default Layout; 

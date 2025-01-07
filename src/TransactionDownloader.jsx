@@ -1,26 +1,42 @@
 import React, { useState } from 'react';
 import { Form, Button, Alert } from 'react-bootstrap';
+import NetworkSelector from './components/NetworkSelector';
 
 export default function TransactionDownloader() {
+  // Get today and yesterday's dates in YYYY-MM-DD format
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     account: '',
-    beforeDate: '',
-    afterDate: '',
+    beforeDate: today,
+    afterDate: yesterday,
     filterContractAction: false,
     contract: '',
-    action: '',
-    network: 'mainnet',
-    customEndpoint: ''
+    action: ''
   });
   
   const [downloadData, setDownloadData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showJsonData, setShowJsonData] = useState(false);
+  const [network, setNetwork] = useState('mainnet');
+  const [customEndpoint, setCustomEndpoint] = useState('');
+  const [customEndpointError, setCustomEndpointError] = useState('');
 
   const NETWORK_ENDPOINTS = {
     mainnet: 'https://lb.libre.org',
     testnet: 'https://testnet.libre.org',
+  };
+
+  const getApiEndpoint = () => {
+    if (network === 'custom') {
+      if (!customEndpoint) {
+        throw new Error('Custom endpoint is required');
+      }
+      return formatEndpoint(customEndpoint);
+    }
+    return NETWORK_ENDPOINTS[network];
   };
 
   const formatEndpoint = (url) => {
@@ -33,7 +49,8 @@ export default function TransactionDownloader() {
 
   const fetchData = async (url, skip = 0, formattedData = []) => {
     try {
-      const response = await fetch(`${url}&skip=${skip * 1000}`);
+      const baseEndpoint = getApiEndpoint();
+      const response = await fetch(`${baseEndpoint}${url}&skip=${skip * 1000}`);
       const data = await response.json();
       
       const newFormattedData = formattedData.concat(
@@ -64,16 +81,6 @@ export default function TransactionDownloader() {
     setDownloadData(null);
 
     try {
-      let baseEndpoint;
-      if (formData.network === 'custom') {
-        if (!formData.customEndpoint) {
-          throw new Error('Custom endpoint is required');
-        }
-        baseEndpoint = formatEndpoint(formData.customEndpoint);
-      } else {
-        baseEndpoint = NETWORK_ENDPOINTS[formData.network];
-      }
-
       if (formData.afterDate && formData.beforeDate && 
           new Date(formData.afterDate) >= new Date(formData.beforeDate)) {
         throw new Error('After Date must be earlier than Before Date');
@@ -86,7 +93,7 @@ export default function TransactionDownloader() {
         ? new Date(formData.afterDate).toISOString().split('T')[0] + 'T00:00:00Z'
         : '';
 
-      let url = `${baseEndpoint}/v2/history/get_actions?limit=1000&account=${formData.account}`;
+      let url = `/v2/history/get_actions?limit=1000&account=${formData.account}`;
       if (afterDate) url += `&after=${afterDate}`;
       if (beforeDate) url += `&before=${beforeDate}`;
       if (formData.filterContractAction && formData.contract && formData.action) {
@@ -156,71 +163,78 @@ export default function TransactionDownloader() {
     document.body.removeChild(a);
   };
 
+  const validateAccountName = (account) => {
+    const regex = /^[a-z1-5.]{1,12}$/;
+    if (!regex.test(account)) {
+      return false;
+    }
+    // Additional rules:
+    // - Cannot start or end with a period
+    // - Cannot have two consecutive periods
+    if (account.startsWith('.') || account.endsWith('.') || account.includes('..')) {
+      return false;
+    }
+    return true;
+  };
+
   return (
     <div className="container-fluid">
-      <div className="row justify-content-center">
-        <div className="col-12 col-md-8 col-lg-6">
-          <h2 className="text-center mb-4">Libre Transaction Downloader</h2>
+      <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
+        <div style={{ maxWidth: '800px', width: '100%' }}>
+          <h2 className="mb-4">Transaction Downloader</h2>
           
+          <div className="alert alert-info mb-4">
+            <i className="bi bi-info-circle me-2"></i>
+            Download transaction history for any Libre account. Filter by date range and specific contract actions.
+          </div>
+
           <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Label>Network</Form.Label>
-              <Form.Select
-                value={formData.network}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  network: e.target.value,
-                  customEndpoint: e.target.value === 'custom' ? '' : formData.customEndpoint
-                })}
-              >
-                <option value="mainnet">Mainnet</option>
-                <option value="testnet">Testnet</option>
-                <option value="custom">Custom Endpoint</option>
-              </Form.Select>
+            <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
+              <NetworkSelector
+                network={network}
+                setNetwork={setNetwork}
+                customEndpoint={customEndpoint}
+                setCustomEndpoint={setCustomEndpoint}
+                customEndpointError={customEndpointError}
+                setCustomEndpointError={setCustomEndpointError}
+              />
             </Form.Group>
 
-            {formData.network === 'custom' && (
-              <Form.Group className="mb-3">
-                <Form.Label>Custom Endpoint</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter API endpoint (e.g., api.example.com)"
-                  value={formData.customEndpoint}
-                  onChange={(e) => setFormData({...formData, customEndpoint: e.target.value})}
-                />
-                <Form.Text className="text-muted">
-                  HTTPS will be used by default if protocol is not specified
-                </Form.Text>
-              </Form.Group>
-            )}
-
-            <Form.Group className="mb-3">
+            <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
               <Form.Label>Account</Form.Label>
               <Form.Control
                 type="text"
                 value={formData.account}
                 onChange={e => setFormData({...formData, account: e.target.value})}
                 required
+                autoFocus
+                name="accountName"
+                isInvalid={formData.account && !validateAccountName(formData.account)}
               />
+              <Form.Control.Feedback type="invalid">
+                Account must be exactly 12 characters using only a-z and 1-5
+              </Form.Control.Feedback>
             </Form.Group>
 
-            <Form.Group className="mb-3">
-              <Form.Label>After Date</Form.Label>
-              <Form.Control
-                type="date"
-                value={formData.afterDate}
-                onChange={e => setFormData({...formData, afterDate: e.target.value})}
-              />
-            </Form.Group>
+            <div className="d-flex gap-3 mb-3">
+              <Form.Group style={{ maxWidth: '200px' }}>
+                <Form.Label>After Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={formData.afterDate}
+                  onChange={e => setFormData({...formData, afterDate: e.target.value})}
+                />
+              </Form.Group>
 
-            <Form.Group className="mb-3">
-              <Form.Label>Before Date</Form.Label>
-              <Form.Control
-                type="date"
-                value={formData.beforeDate}
-                onChange={e => setFormData({...formData, beforeDate: e.target.value})}
-              />
-            </Form.Group>
+              <Form.Group style={{ maxWidth: '200px' }}>
+                <Form.Label>Before Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={formData.beforeDate}
+                  onChange={e => setFormData({...formData, beforeDate: e.target.value})}
+                />
+              </Form.Group>
+            </div>
 
             <Form.Check
               type="checkbox"
@@ -231,8 +245,8 @@ export default function TransactionDownloader() {
             />
 
             {formData.filterContractAction && (
-              <div className="mb-3">
-                <Form.Group className="mb-3">
+              <div className="d-flex gap-3 mb-3">
+                <Form.Group style={{ maxWidth: '200px' }}>
                   <Form.Label>Contract</Form.Label>
                   <Form.Control
                     type="text"
@@ -241,7 +255,7 @@ export default function TransactionDownloader() {
                   />
                 </Form.Group>
 
-                <Form.Group className="mb-3">
+                <Form.Group style={{ maxWidth: '200px' }}>
                   <Form.Label>Action</Form.Label>
                   <Form.Control
                     type="text"
@@ -252,11 +266,14 @@ export default function TransactionDownloader() {
               </div>
             )}
 
-            <div className="d-grid gap-2">
-              <Button type="submit" variant="primary" disabled={loading}>
-                {loading ? 'Loading...' : 'Submit'}
-              </Button>
-            </div>
+            <Button 
+              type="submit" 
+              variant="primary" 
+              disabled={loading}
+              style={{ width: 'auto' }}
+            >
+              {loading ? 'Loading...' : 'Submit'}
+            </Button>
           </Form>
 
           {error && (
@@ -266,44 +283,33 @@ export default function TransactionDownloader() {
           )}
 
           {downloadData && (
-            <div className="mt-4">
-              <h4 className="mb-3">Results</h4>
-              <p className="mb-3">Total Transactions: {downloadData.totalTransactions}</p>
-              
-              <div className="mb-3">
-                <h5>Sent Amounts:</h5>
-                <pre className="bg-light p-3 rounded">
-                  {JSON.stringify(downloadData.sentAmounts, null, 2)}
-                </pre>
-              </div>
-              
-              <div className="mb-3">
-                <h5>Received Amounts:</h5>
-                <pre className="bg-light p-3 rounded">
-                  {JSON.stringify(downloadData.receivedAmounts, null, 2)}
-                </pre>
-              </div>
-
-              <div className="d-flex gap-2">
-                <Button onClick={handleDownload} variant="primary">
-                  Download CSV
-                </Button>
-
-                <Button 
-                  onClick={() => setShowJsonData(!showJsonData)} 
-                  variant="outline-secondary"
-                >
-                  {showJsonData ? 'Hide Data' : 'Show Data'}
-                </Button>
-              </div>
-
-              {showJsonData && (
-                <div className="mt-3">
-                  <pre className="bg-light p-3 rounded" style={{ maxHeight: '400px', overflow: 'auto' }}>
-                    {JSON.stringify(downloadData.transactions, null, 2)}
+            <div className="card mt-4 bg-light">
+              <div className="card-body">
+                <h5 className="card-title mb-3">Results</h5>
+                <p className="mb-3">Total Transactions: {downloadData.totalTransactions}</p>
+                
+                <div className="mb-3">
+                  <h6>Sent Amounts:</h6>
+                  <pre className="bg-white p-3 rounded">
+                    {JSON.stringify(downloadData.sentAmounts, null, 2)}
                   </pre>
                 </div>
-              )}
+                
+                <div className="mb-3">
+                  <h6>Received Amounts:</h6>
+                  <pre className="bg-white p-3 rounded">
+                    {JSON.stringify(downloadData.receivedAmounts, null, 2)}
+                  </pre>
+                </div>
+
+                <Button 
+                  variant="primary" 
+                  onClick={handleDownload}
+                  disabled={!downloadData?.transactions}
+                >
+                  Download CSV
+                </Button>
+              </div>
             </div>
           )}
         </div>
