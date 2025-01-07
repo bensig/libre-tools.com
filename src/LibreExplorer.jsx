@@ -740,10 +740,10 @@ const LibreExplorer = () => {
             <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
               <Form.Label>Smart Contract Account Name</Form.Label>
               <div>
-                <div className="d-flex gap-2 mb-1">
+                <div className="d-flex gap-2">
                   <Form.Control
                     type="text"
-                    name="accountName"
+                    name="smartContractAccount"
                     value={accountName}
                     onChange={handleAccountNameChange}
                     isInvalid={accountName && !isValidLibreAccount(accountName)}
@@ -761,11 +761,11 @@ const LibreExplorer = () => {
                     onClick={fetchTables}
                     disabled={isLoading}
                   >
-                    {isLoading ? <Spinner size="sm" /> : 'Fetch Tables'}
+                    {isLoading ? <Spinner size="sm" /> : 'Explore'}
                   </Button>
                 </div>
                 {accountName && !isValidLibreAccount(accountName) && (
-                  <div className="text-danger small">
+                  <div className="text-danger small mt-1">
                     Invalid account name. Must be 1-12 characters, only a-z, 1-5, and dots allowed.
                   </div>
                 )}
