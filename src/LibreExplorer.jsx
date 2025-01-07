@@ -747,7 +747,7 @@ const LibreExplorer = () => {
                     value={accountName}
                     onChange={handleAccountNameChange}
                     isInvalid={accountName && !isValidLibreAccount(accountName)}
-                    placeholder="e.g. dex.libre"
+                    placeholder=""
                     autoFocus
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
