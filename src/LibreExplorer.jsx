@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton, Toast, ToastContainer } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
+import { useParams, useNavigate } from 'react-router-dom';
 
 const LibreExplorer = () => {
+  const { network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope } = useParams();
+  const navigate = useNavigate();
+  const initialized = useRef(false);
+
   const NETWORK_ENDPOINTS = {
     mainnet: 'https://lb.libre.org',
     testnet: 'https://testnet.libre.org',
@@ -63,7 +68,7 @@ const LibreExplorer = () => {
     };
   }, []); // Empty dependency array means this runs once on mount
 
-  // Add this useEffect to handle network changes
+  // Add this useEffect for network changes
   useEffect(() => {
     // Clear all data when network changes
     setTables([]);
@@ -87,6 +92,158 @@ const LibreExplorer = () => {
   useEffect(() => {
     console.log('Actions changed:', actions);
   }, [actions]);
+
+  // Add this useEffect for initialization
+  useEffect(() => {
+    console.log('URL params:', { urlNetwork, contract, urlView, urlItem, urlScope });
+    
+    if (!initialized.current && urlNetwork && contract) {
+      console.log('Initializing with network:', urlNetwork, 'and contract:', contract);
+      
+      // Prepare state updates
+      let networkUpdate = 'mainnet';
+      let endpointUpdate = '';
+      let contractName = contract;
+
+      if (urlNetwork === 'testnet') {
+        networkUpdate = 'testnet';
+      } else if (urlNetwork === 'custom') {
+        networkUpdate = 'custom';
+        endpointUpdate = contract;
+        contractName = urlItem;
+      }
+
+      // Set all state at once
+      setNetwork(networkUpdate);
+      setCustomEndpoint(endpointUpdate);
+      setAccountName(contractName);
+      
+      initialized.current = true;
+    }
+  }, [urlNetwork, contract]); // Only depend on network and contract
+
+  // Add useEffect for accountName changes
+  useEffect(() => {
+    if (accountName) {
+      console.log('Account name set, fetching tables:', accountName);
+      fetchTables();
+    }
+  }, [accountName]);
+
+  // Add new useEffect for contract loading
+  useEffect(() => {
+    if (contract && network) { // Only proceed if both network and contract are set
+      console.log('Loading contract:', contract);
+      const contractName = urlNetwork === 'custom' ? urlItem : contract;
+      console.log('Setting account name to:', contractName);
+      setAccountName(contractName);
+      setError(null);  // Clear any existing errors
+      setTimeout(() => fetchTables(), 100); // Increased timeout to ensure network is ready
+    }
+  }, [network, contract]); // Depend on network state
+
+  // Add useEffect for table selection and scope handling
+  useEffect(() => {
+    const fetchScopesForTable = async (tableName) => {
+      try {
+        console.log('Fetching scopes for table:', tableName);
+        const response = await fetchWithCorsHandling(
+          '/v1/chain/get_table_by_scope',
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              code: accountName,
+              table: tableName,
+              limit: 100
+            }),
+          }
+        );
+        const data = await response.json();
+        console.log('Raw scope data:', data.rows);
+        
+        // Filter scopes for this table
+        const validScopes = data.rows
+          .filter(row => row.table.replace(/\.\.\.?\d+$/, '') === tableName)
+          .reduce((acc, row) => {
+            const baseScope = row.scope;
+            if (!acc[baseScope] || acc[baseScope].count < row.count) {
+              acc[baseScope] = row;
+            }
+            return acc;
+          }, {});
+
+        const scopeList = Object.values(validScopes)
+          .sort((a, b) => b.count - a.count);
+        
+        // Always include the contract account as a scope option
+        if (!scopeList.find(s => s.scope === accountName)) {
+          scopeList.push({
+            code: accountName,
+            scope: accountName,
+            table: tableName,
+            payer: accountName,
+            count: 0
+          });
+        }
+
+        console.log('Setting scopes:', scopeList);
+        setScopes(scopeList);
+
+        // If URL has a scope, use it; otherwise use the one with most rows
+        if (!scope) {
+          const scopeToUse = urlScope || 
+            (scopeList.length > 0 ? 
+              (scopeList.find(s => s.count > 0)?.scope || accountName) : 
+              accountName);
+          
+          console.log('Setting initial scope:', scopeToUse);
+          setScope(scopeToUse);
+          fetchTableRows('forward', scopeToUse, tableName);
+        }
+      } catch (error) {
+        console.error('Error fetching scopes:', error);
+        setError(error.message);
+      }
+    };
+
+    if (selectedTable && accountName) {
+      console.log('Selected table changed, fetching scopes:', selectedTable);
+      fetchScopesForTable(selectedTable);
+    }
+  }, [selectedTable, accountName]); // Depend on selectedTable and accountName
+
+  // Add useEffect for URL-based initialization
+  useEffect(() => {
+    if (urlItem && urlView === 'tables' && accountName) {
+      setSelectedTable(urlItem);
+      if (urlScope) {
+        setScope(urlScope);
+        fetchTableRows('forward', urlScope, urlItem);
+      }
+    }
+  }, [urlView, urlItem, urlScope, accountName]);
+
+  // Add this useEffect to monitor accountName changes
+  useEffect(() => {
+    console.log('Account name changed to:', accountName);
+  }, [accountName]);
+
+  // Add this useEffect for table changes
+  useEffect(() => {
+    if (selectedTable && accountName) {
+      console.log('Selected table changed to:', selectedTable);
+      updateURL();
+    }
+  }, [selectedTable]);
+
+  // Add this useEffect for scope changes
+  useEffect(() => {
+    if (scope && selectedTable && accountName) {
+      console.log('Scope changed to:', scope);
+      updateURL();
+    }
+  }, [scope]);
 
   const getApiEndpoint = () => {
     if (network === 'custom') {
@@ -150,14 +307,19 @@ const LibreExplorer = () => {
   };
 
   const fetchTables = async () => {
+    if (!accountName) {
+        console.log('No account name set, skipping fetch');
+        return;
+    }
+    
     setIsLoading(true);
     setError(null);
     setTables([]);
     setActions([]);
     
     try {
-        // Get ABI data
         console.log('Fetching ABI for account:', accountName);
+        // Get ABI data
         const abiResponse = await fetchWithCorsHandling(
             '/v1/chain/get_abi',
             {
@@ -186,7 +348,6 @@ const LibreExplorer = () => {
         console.log('Setting tables:', abiTables);
         setTables(abiTables.map(table => table.name));
 
-        // Rest of the function...
     } catch (error) {
         console.error('Error in fetchTables:', error);
         setError(error.message);
@@ -200,7 +361,7 @@ const LibreExplorer = () => {
     const table = e.target.value;
     console.log('=== handleTableSelect called with table:', table, '===');
     
-    // Reset ALL state
+    // Reset state but preserve scope if it exists in URL
     setCurrentPage(0);
     setPreviousKeys([]);
     setNextKey(null);
@@ -210,7 +371,9 @@ const LibreExplorer = () => {
     setIsInitialLoad(true);
     setSearchKey('');
     setIsSearching(false);
-    setScope(null);  // Clear scope
+    if (!urlScope) {
+      setScope(null);  // Only clear scope if not in URL
+    }
     
     if (!table) {
       console.log('No table selected, returning');
@@ -219,6 +382,7 @@ const LibreExplorer = () => {
 
     setSelectedTable(table);
     setRows([]);
+    updateURL();
     
     try {
       // Get all scopes for this table from the initial scope data
@@ -238,7 +402,7 @@ const LibreExplorer = () => {
       const data = await response.json();
       console.log('Raw scope data for table:', data.rows);
       
-      // Filter scopes for this table (including variants with dots)
+      // Filter scopes for this table
       const validScopes = data.rows
         .filter(row => row.table.replace(/\.\.\.?\d+$/, '') === table)
         .reduce((acc, row) => {
@@ -254,7 +418,7 @@ const LibreExplorer = () => {
       
       console.log('Sorted scope list:', scopeList);
 
-      // Always include the contract account as a scope option if not already present
+      // Always include the contract account as a scope option
       if (!scopeList.find(s => s.scope === accountName)) {
         scopeList.push({
           code: accountName,
@@ -267,25 +431,17 @@ const LibreExplorer = () => {
 
       setScopes(scopeList);
 
-      // Select the scope with the most rows, or default to contract account
-      const bestScope = scopeList.length > 0 ? 
-        (scopeList.find(s => s.count > 0)?.scope || accountName) : 
-        accountName;
+      // If URL has a scope, use it; otherwise use the one with most rows
+      const scopeToUse = urlScope || 
+        (scopeList.length > 0 ? 
+          (scopeList.find(s => s.count > 0)?.scope || accountName) : 
+          accountName);
       
-      console.log('Selected scope:', bestScope);
-      setScope(bestScope);
+      console.log('Selected scope:', scopeToUse);
+      setScope(scopeToUse);
 
-      // Add warning about row count discrepancy
-      const selectedScopeData = scopeList.find(s => s.scope === bestScope);
-      if (selectedScopeData && selectedScopeData.count > 0) {
-        setWarningMessage(`
-          Note: The scope API reported ${selectedScopeData.count} total rows, but this includes both active and inactive rows.
-          The table above shows only active rows which may differ from that count.
-        `.trim().replace(/^\s+/gm, ''));
-      }
-      
-      // Use the current table value directly
-      await fetchTableRows('forward', bestScope, table);
+      // Fetch rows with the selected scope
+      await fetchTableRows('forward', scopeToUse, table);
     } catch (error) {
       console.error('Error in handleTableSelect:', error);
       setError(error.message);
@@ -301,6 +457,7 @@ const LibreExplorer = () => {
     }
     
     fetchTables();
+    updateURL();
   };
 
   const determineSearchField = (rows) => {
@@ -453,6 +610,7 @@ const LibreExplorer = () => {
 
   const handleScopeChange = (newScope) => {
     setScope(newScope);
+    updateURL(); // Add URL update here
     setWarningMessage(null);
     setError(null);
     setRows([]);
@@ -764,12 +922,41 @@ const LibreExplorer = () => {
     );
   };
 
-  // Update the NetworkSelector to trigger data refresh
+  // Add this function to update URL when state changes
+  const updateURL = () => {
+    let url = '/explorer';
+    
+    if (network) {
+      url += `/${network}`;
+      
+      if (accountName) {
+        if (network === 'custom') {
+          url += `/${customEndpoint}/${accountName}`;
+        } else {
+          url += `/${accountName}`;
+        }
+        
+        if (view) {
+          url += `/${view}`;
+          
+          if (selectedTable) {
+            url += `/${selectedTable}`;
+            
+            if (scope) {
+              url += `/${scope}`;
+            }
+          }
+        }
+      }
+    }
+    
+    navigate(url);
+  };
+
+  // Add to your existing handleNetworkChange
   const handleNetworkChange = (newNetwork) => {
     setNetwork(newNetwork);
-    if (accountName) {
-        fetchTables();
-    }
+    updateURL();
   };
 
   return (

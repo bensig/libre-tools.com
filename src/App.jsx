@@ -15,6 +15,11 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/explorer" element={<LibreExplorer />} />
+                <Route path="/explorer/:network" element={<LibreExplorer />} />
+                <Route path="/explorer/:network/:contract" element={<LibreExplorer />} />
+                <Route path="/explorer/:network/:contract/:view" element={<LibreExplorer />} />
+                <Route path="/explorer/:network/:contract/:view/:item" element={<LibreExplorer />} />
+                <Route path="/explorer/:network/:contract/:view/:item/:scope" element={<LibreExplorer />} />
                 <Route path="/transactions" element={<TransactionDownloader />} />
                 <Route path="/btc-tracker" element={<BtcTracker />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
