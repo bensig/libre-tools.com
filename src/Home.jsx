@@ -23,7 +23,7 @@ const Home = () => {
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-center">
-        <div style={{ maxWidth: '800px', width: '100%' }}>
+        <div style={{ width: '100%' }}>
           <h2 className="mb-4">Libre Blockchain Tools</h2>
           
           <div className="alert alert-info mb-4">

@@ -775,7 +775,7 @@ const LibreExplorer = () => {
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
-        <div style={{ maxWidth: '800px', width: '100%' }}>
+        <div style={{  width: '100%' }}>
           <h2 className="text-3xl font-bold mb-6">Smart Contract Explorer</h2>
           
           <div className="alert alert-info mb-4 d-flex">

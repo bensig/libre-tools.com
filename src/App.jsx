@@ -9,13 +9,19 @@ function App() {
   return (
     <Router>
       <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/explorer" element={<LibreExplorer />} />
-          <Route path="/transactions" element={<TransactionDownloader />} />
-          <Route path="/btc-tracker" element={<BtcTracker />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <div className="container-fluid">
+          <div className="d-flex justify-content-center">
+            <div style={{ width: '95%', maxWidth: '1800px', padding: '20px' }}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/explorer" element={<LibreExplorer />} />
+                <Route path="/transactions" element={<TransactionDownloader />} />
+                <Route path="/btc-tracker" element={<BtcTracker />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </div>
+        </div>
       </Layout>
     </Router>
   );

@@ -239,7 +239,7 @@ export default function TransactionDownloader() {
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
-        <div style={{ maxWidth: '800px', width: '100%' }}>
+        <div style={{ width: '100%' }}>
           <h2 className="mb-4">Transaction Downloader</h2>
           
           <div className="alert alert-info mb-4">
