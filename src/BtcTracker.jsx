@@ -78,69 +78,95 @@ const BtcTracker = () => {
     try {
       const baseEndpoint = getApiEndpoint();
 
-      // First try to get transaction from Libre
-      const libreResponse = await fetch(`${baseEndpoint}/v1/history/get_transaction`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: hash,
-          block_num_hint: 0
-        })
-      });
+      // Check both Libre and BTC simultaneously
+      const [libreResponse, btcResponse] = await Promise.all([
+        // Try Libre transaction
+        fetch(`${baseEndpoint.libre}/v1/history/get_transaction`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: hash,
+            block_num_hint: 0
+          })
+        }).catch(err => ({ ok: false, error: err })),
 
-      const libreData = await libreResponse.json();
+        // Try BTC transaction
+        fetch(`${baseEndpoint.btc}/api/tx/${hash}`).catch(err => ({ ok: false, error: err }))
+      ]);
 
-      if (libreData.traces && libreData.traces.length > 0) {
-        // Find transfer action in traces
-        const transferTrace = libreData.traces.find(trace => 
-          trace.act.name === 'transfer' && 
-          trace.act.data && 
-          trace.act.data.memo
-        );
+      // Check if it's a Libre transaction
+      if (libreResponse.ok) {
+        const libreData = await libreResponse.json();
+        if (libreData.traces && libreData.traces.length > 0) {
+          // Find transfer action to x.libre in traces
+          const transferTrace = libreData.traces.find(trace => 
+            trace.act.name === 'transfer' && 
+            trace.act.account === 'btc.libre' &&
+            trace.act.data && 
+            trace.act.data.to === 'x.libre' &&
+            trace.act.data.memo
+          );
 
-        if (transferTrace) {
-          const { data } = transferTrace.act;
-          const btcAddress = data.memo.match(/[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-zAC-HJ-NP-Z02-9]{11,71}/);
-          const amount = data.quantity.split(' ')[0];
+          if (transferTrace) {
+            const { data } = transferTrace.act;
+            const btcAddress = data.memo;
+            const amount = data.quantity;
 
-          if (btcAddress) {
-            // Check ptxhistory table for this address and amount
-            const tableResponse = await fetch(`${baseEndpoint}/v1/chain/get_table_rows`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code: 'x.libre',
-                scope: 'completed',
-                table: 'ptxhistory',
-                json: true,
-                limit: 1000
-              })
-            });
+            // Check all scopes (completed, pending, canceled) for this transaction
+            const scopes = ['completed', 'pending', 'canceled'];
+            let matchingTx = null;
+            let txStatus = null;
 
-            const tableData = await tableResponse.json();
-            const matchingTx = tableData.rows.find(row => 
-              row.to === btcAddress[0] && 
-              parseFloat(row.quantity) === parseFloat(amount)
-            );
+            for (const scope of scopes) {
+              const tableResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  code: 'x.libre',
+                  scope: scope,
+                  table: 'ptxhistory',
+                  json: true,
+                  limit: 1000
+                })
+              });
+
+              const tableData = await tableResponse.json();
+              const foundTx = tableData.rows.find(row => 
+                row.to === btcAddress && 
+                parseFloat(row.quantity) === parseFloat(amount)
+              );
+
+              if (foundTx) {
+                matchingTx = foundTx;
+                txStatus = scope;
+                break;
+              }
+            }
 
             if (matchingTx) {
               setResult({
                 type: 'peg-out',
-                status: 'completed',
+                status: txStatus, // Will be 'completed', 'pending', or 'canceled'
                 libreHash: hash,
                 btcHash: matchingTx.btc_hash,
                 amount: amount,
-                btcAddress: btcAddress[0],
+                btcAddress: btcAddress,
                 from: data.from,
-                blockTime: transferTrace.block_time
+                blockTime: transferTrace.block_time,
+                cancelReason: txStatus === 'canceled' ? matchingTx.cancel_reason : null
               });
+
+              // Set appropriate error message for canceled transactions
+              if (txStatus === 'canceled') {
+                setError(`Transaction was canceled${matchingTx.cancel_reason ? `: ${matchingTx.cancel_reason}` : ''}`);
+              }
             } else {
               setResult({
                 type: 'peg-out',
-                status: 'pending',
+                status: 'new', // Changed from 'pending' to 'new' for more clarity
                 libreHash: hash,
                 amount: amount,
-                btcAddress: btcAddress[0],
+                btcAddress: btcAddress,
                 from: data.from,
                 blockTime: transferTrace.block_time
               });
@@ -148,105 +174,127 @@ const BtcTracker = () => {
             return; // Exit after finding result
           }
         }
-      } else {
-        // Check if this is a Bitcoin hash
-        try {
-          const mempoolResponse = await fetch(`${baseEndpoint.btc}/api/tx/${hash}`);
-          if (mempoolResponse.ok) {
-            const btcTx = await mempoolResponse.json();
-            console.log('BTC Transaction:', btcTx);
-            
-            // First get the x.libre account for this BTC address
-            const accountsResponse = await fetch(`${baseEndpoint}/v1/chain/get_table_rows`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code: 'x.libre',
-                scope: 'x.libre',
-                table: 'accounts',
-                json: true,
-                limit: 1000
-              })
-            });
+      }
 
-            const accountsData = await accountsResponse.json();
-            const matchingAccount = accountsData.rows.find(row => row.btc_address === btcTx.vout[0].scriptpubkey_address);
+      // Check if it's a BTC transaction
+      if (btcResponse.ok) {
+        const btcTx = await btcResponse.json();
+        console.log('BTC Transaction:', btcTx);
+        
+        // First get the x.libre account for this BTC address
+        const accountsResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: 'x.libre',
+            scope: 'x.libre',
+            table: 'accounts',
+            json: true,
+            limit: 1000
+          })
+        });
 
-            if (matchingAccount) {
-              // Calculate date range (current tx time + 7 days)
-              const txTimestamp = new Date(btcTx.status.block_time * 1000);
-              const endDate = new Date(txTimestamp);
-              endDate.setDate(endDate.getDate() + 7);
+        const accountsData = await accountsResponse.json();
+        let matchingAccount = accountsData.rows.find(row => row.btc_address === btcTx.vout[0].scriptpubkey_address);
+        let isVaultTx = false;
 
-              // Get account history for transfers received from btc.libre within date range
-              const accountResponse = await fetch(`${baseEndpoint}/v1/history/get_actions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  account_name: matchingAccount.account,
-                  pos: -1,
-                  offset: -1000,
-                  filter: "btc.libre:transfer",
-                  after: txTimestamp.toISOString(),
-                  before: endDate.toISOString()
-                })
-              });
+        if (!matchingAccount) {
+          // Check v.libre if account not found in x.libre
+          const vaultAccountsResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: 'v.libre',
+              scope: 'v.libre',
+              table: 'accounts',
+              json: true,
+              limit: 1000
+            })
+          });
 
-              const accountData = await accountResponse.json();
-              console.log('BTC Transaction Time:', txTimestamp.toISOString());
-              console.log('Search End Time:', endDate.toISOString());
-              console.log('Account Actions:', accountData);
-
-              // Convert satoshis to BTC
-              const btcAmount = (btcTx.vout[0].value / 100000000).toFixed(8);
-
-              // Find all matching transfers by amount
-              const matchingActions = accountData.actions?.filter(action => {
-                const actionData = action.action_trace.act.data;
-                return action.action_trace.act.name === 'transfer' && 
-                       action.action_trace.act.account === 'btc.libre' &&
-                       actionData.to === matchingAccount.account &&
-                       parseFloat(actionData.quantity.split(' ')[0]) === parseFloat(btcAmount);
-              });
-
-              // Sort by block time and get earliest match
-              if (matchingActions && matchingActions.length > 0) {
-                const earliestMatch = matchingActions.sort((a, b) => 
-                  new Date(a.block_time) - new Date(b.block_time)
-                )[0];
-
-                setResult({
-                  type: 'peg-in',
-                  status: 'completed',
-                  btcHash: hash,
-                  libreHash: earliestMatch.action_trace.trx_id,
-                  amount: earliestMatch.action_trace.act.data.quantity,
-                  libreAccount: matchingAccount.account,
-                  btcTimestamp: new Date(btcTx.status.block_time * 1000).toLocaleString(),
-                  libreTimestamp: new Date(earliestMatch.block_time).toLocaleString()
-                });
-              } else {
-                setResult({
-                  type: 'peg-in',
-                  status: 'pending',
-                  btcHash: hash,
-                  amount: btcAmount + ' BTC',
-                  libreAccount: matchingAccount.account,
-                  btcTimestamp: new Date(btcTx.status.block_time * 1000).toLocaleString()
-                });
-                setError('Matching Libre transaction not found yet - transaction may be pending');
-              }
-            } else {
-              setError('Bitcoin address not found in x.libre accounts');
-            }
-          } else {
-            setError('Bitcoin transaction not found on mempool.space');
+          const vaultAccountsData = await vaultAccountsResponse.json();
+          matchingAccount = vaultAccountsData.rows.find(row => row.btc_address === btcTx.vout[0].scriptpubkey_address);
+          if (matchingAccount) {
+            isVaultTx = true;
           }
-        } catch (err) {
-          console.error('Error fetching from Bitcoin node:', err);
-          setError('Error fetching Bitcoin transaction details');
+        }
+
+        if (matchingAccount) {
+          // Calculate date range (current tx time + 7 days)
+          const txTimestamp = new Date(btcTx.status.block_time * 1000);
+          const endDate = new Date(txTimestamp);
+          endDate.setDate(endDate.getDate() + 7);
+
+          // Get account history for transfers received from btc.libre or cbtc.libre within date range
+          const accountResponse = await fetch(`${baseEndpoint.libre}/v1/history/get_actions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_name: matchingAccount.account,
+              pos: -1,
+              offset: -1000,
+              filter: isVaultTx ? "cbtc.libre:transfer" : "btc.libre:transfer",
+              after: txTimestamp.toISOString(),
+              before: endDate.toISOString()
+            })
+          });
+
+          const accountData = await accountResponse.json();
+          console.log('BTC Transaction Time:', txTimestamp.toISOString());
+          console.log('Search End Time:', endDate.toISOString());
+          console.log('Account Actions:', accountData);
+
+          // Convert satoshis to BTC
+          const btcAmount = (btcTx.vout[0].value / 100000000).toFixed(8);
+
+          // Find all matching transfers by amount
+          const matchingActions = accountData.actions?.filter(action => {
+            const actionData = action.action_trace.act.data;
+            return action.action_trace.act.name === 'transfer' && 
+                   action.action_trace.act.account === (isVaultTx ? 'cbtc.libre' : 'btc.libre') &&
+                   actionData.to === matchingAccount.account &&
+                   parseFloat(actionData.quantity.split(' ')[0]) === parseFloat(btcAmount);
+          });
+
+          // Sort by block time and get earliest match
+          if (matchingActions && matchingActions.length > 0) {
+            const earliestMatch = matchingActions.sort((a, b) => 
+              new Date(a.block_time) - new Date(b.block_time)
+            )[0];
+
+            setResult({
+              type: 'peg-in',
+              status: 'completed',
+              btcHash: hash,
+              libreHash: earliestMatch.action_trace.trx_id,
+              amount: earliestMatch.action_trace.act.data.quantity,
+              libreAccount: matchingAccount.account,
+              btcTimestamp: new Date(btcTx.status.block_time * 1000).toLocaleString(),
+              libreTimestamp: new Date(earliestMatch.block_time).toLocaleString(),
+              isVaultTx: isVaultTx
+            });
+          } else {
+            setResult({
+              type: 'peg-in',
+              status: 'pending',
+              btcHash: hash,
+              amount: btcAmount + (isVaultTx ? ' CBTC' : ' BTC'),
+              libreAccount: matchingAccount.account,
+              btcTimestamp: new Date(btcTx.status.block_time * 1000).toLocaleString(),
+              isVaultTx: isVaultTx
+            });
+            setError('Matching Libre transaction not found yet - transaction may be pending');
+          }
+        } else {
+          setError('Bitcoin address not found in x.libre or v.libre accounts');
         }
       }
+
+      // If neither was successful, show error
+      if (!libreResponse.ok && !btcResponse.ok) {
+        setError('Transaction not found on either Libre or Bitcoin networks');
+      }
+
     } catch (err) {
       console.error('Error:', err);
       setError(err.message || 'Error processing transaction');
@@ -326,7 +374,16 @@ const BtcTracker = () => {
               <h3 className="text-xl font-bold mb-3">Transaction Details</h3>
               <div className="space-y-2">
                 <p><strong>Type:</strong> {result.type === 'peg-in' ? 'Bitcoin → Libre' : 'Libre → Bitcoin'}</p>
-                <p><strong>Status:</strong> <span className={`badge ${result.status === 'completed' ? 'bg-success' : 'bg-warning'}`}>{result.status}</span></p>
+                <p><strong>Status:</strong>{' '}
+                  <span className={`badge ${
+                    result.status === 'completed' ? 'bg-success' : 
+                    result.status === 'pending' ? 'bg-warning' :
+                    result.status === 'canceled' ? 'bg-danger' :
+                    'bg-secondary'
+                  }`}>
+                    {result.status.charAt(0).toUpperCase() + result.status.slice(1)}
+                  </span>
+                </p>
                 <p><strong>Amount:</strong> {result.amount}</p>
                 
                 {result.type === 'peg-out' ? (
