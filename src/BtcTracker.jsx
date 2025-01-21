@@ -28,8 +28,14 @@ const BtcTracker = () => {
   const [customEndpointError, setCustomEndpointError] = useState('');
 
   const NETWORK_ENDPOINTS = {
-    mainnet: 'https://lb.libre.org',
-    testnet: 'https://testnet.libre.org',
+    mainnet: {
+      libre: 'https://lb.libre.org',
+      btc: 'https://mempool.space'
+    },
+    testnet: {
+      libre: 'https://test.libre.eosusa.io',
+      btc: 'https://mempool.space/signet'
+    }
   };
 
   const getApiEndpoint = () => {
@@ -145,7 +151,7 @@ const BtcTracker = () => {
       } else {
         // Check if this is a Bitcoin hash
         try {
-          const mempoolResponse = await fetch(`https://mempool.space/api/tx/${hash}`);
+          const mempoolResponse = await fetch(`${baseEndpoint.btc}/api/tx/${hash}`);
           if (mempoolResponse.ok) {
             const btcTx = await mempoolResponse.json();
             console.log('BTC Transaction:', btcTx);
@@ -237,7 +243,7 @@ const BtcTracker = () => {
             setError('Bitcoin transaction not found on mempool.space');
           }
         } catch (err) {
-          console.error('Error fetching from mempool.space:', err);
+          console.error('Error fetching from Bitcoin node:', err);
           setError('Error fetching Bitcoin transaction details');
         }
       }
@@ -348,7 +354,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Bitcoin Hash:</strong>{' '}
                         <a 
-                          href={`https://mempool.space/tx/${result.btcHash}`}
+                          href={`${getApiEndpoint().btc}/tx/${result.btcHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
@@ -363,7 +369,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Destination Bitcoin Address:</strong>{' '}
                         <a 
-                          href={`https://mempool.space/address/${result.btcAddress}`}
+                          href={`${getApiEndpoint().btc}/address/${result.btcAddress}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
@@ -379,7 +385,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Bitcoin Hash:</strong>{' '}
                         <a 
-                          href={`https://mempool.space/tx/${result.btcHash}`}
+                          href={`${getApiEndpoint().btc}/tx/${result.btcHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
