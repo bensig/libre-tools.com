@@ -755,9 +755,9 @@ const LibreExplorer = () => {
     setAccountName(value);
   };
 
-  // Add lowercase enforcement to custom scope input
+  // Modify handleCustomScopeChange to remove toLowerCase()
   const handleCustomScopeChange = (e) => {
-    setCustomScopeInput(e.target.value.toLowerCase());
+    setCustomScopeInput(e.target.value); // Remove toLowerCase()
   };
 
   // Add lowercase enforcement to search key
@@ -1243,7 +1243,7 @@ const LibreExplorer = () => {
                                 className="form-control"
                                 value={customScopeInput}
                                 onChange={handleCustomScopeChange}
-                                placeholder="Enter scope"
+                                placeholder="Enter scope (case sensitive)"
                             />
                         </Modal.Body>
                         <Modal.Footer>
