@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton, Toast, ToastContainer } from "react-bootstrap";
+import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
+import { WalletPluginBitcoinLibre } from "@libre-chain/wallet-plugin-bitcoin-libre";
+import { SessionKit } from "@wharfkit/session";
+import { WalletPluginAnchor } from "@wharfkit/wallet-plugin-anchor";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
+import { WebRenderer } from "@wharfkit/web-renderer";
 
 const LibreExplorer = () => {
   const { network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope } = useParams();
@@ -50,6 +54,21 @@ const LibreExplorer = () => {
   const [abiData, setAbiData] = useState(null);
   const [showActionCommand, setShowActionCommand] = useState(false);
   const [actionCommand, setActionCommand] = useState('');
+  const [walletSession, setWalletSession] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [chainId, setChainId] = useState(null);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+
+  const networks = {
+    mainnet: {
+      chainId: 'aca376f206b8fc25a6ed44dbdc66547c8af0a623a0a5f35e2c27c4c0aaea3808',
+      rpcEndpoint: 'https://lb.libre.org',
+    },
+    testnet: {
+      chainId: '73e2c46a3cb531e3e981e5ac2e4c0dcd4a286cb649aeaf8c087f370eb44e7e2c',
+      rpcEndpoint: 'https://testnet.libre.org',
+    }
+  };
 
   // Add useEffect for autofocus
   useEffect(() => {
@@ -124,12 +143,29 @@ const LibreExplorer = () => {
     }
   }, [urlNetwork, contract]); // Only depend on network and contract
 
-  // Add useEffect for accountName changes
+  // Modify the useEffect for accountName changes to debounce the fetch
   useEffect(() => {
+    let timeoutId;
+    
     if (accountName) {
-      console.log('Account name set, fetching tables:', accountName);
-      fetchTables();
+      // Clear any existing timeout
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      // Set a new timeout to fetch tables
+      timeoutId = setTimeout(() => {
+        console.log('Account name set, fetching tables:', accountName);
+        fetchTables();
+      }, 500); // 500ms debounce
     }
+    
+    // Cleanup function
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [accountName]);
 
   // Add new useEffect for contract loading
@@ -213,7 +249,7 @@ const LibreExplorer = () => {
       console.log('Selected table changed, fetching scopes:', selectedTable);
       fetchScopesForTable(selectedTable);
     }
-  }, [selectedTable, accountName]); // Depend on selectedTable and accountName
+  }, [selectedTable, accountName]);
 
   // Add useEffect for URL-based initialization
   useEffect(() => {
@@ -246,6 +282,30 @@ const LibreExplorer = () => {
       updateURL();
     }
   }, [scope]);
+
+  useEffect(() => {
+    console.log('ABI Data changed:', abiData);
+  }, [abiData]);
+
+  useEffect(() => {
+    console.log('Actions changed:', actions);
+  }, [actions]);
+
+  // Fetch chain ID when network changes
+  useEffect(() => {
+    const fetchChainId = async () => {
+      try {
+        const response = await fetch(`${getApiEndpoint()}/v1/chain/get_info`);
+        const data = await response.json();
+        setChainId(data.chain_id);
+        console.log('Chain ID:', data.chain_id);
+      } catch (error) {
+        console.error('Error fetching chain ID:', error);
+      }
+    };
+
+    fetchChainId();
+  }, [network, customEndpoint]); // Trigger when network or customEndpoint changes
 
   const getApiEndpoint = () => {
     if (network === 'custom') {
@@ -296,7 +356,11 @@ const LibreExplorer = () => {
       
       if (!response.ok) {
         if (response.status === 400) {
-          throw new Error('Account not found - are you on the right network?');
+          // Only throw the network error if we're actually fetching account data
+          if (path.includes('get_abi')) {
+            throw new Error('Account not found - are you on the right network?');
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -310,8 +374,13 @@ const LibreExplorer = () => {
 
   const fetchTables = async () => {
     if (!accountName) {
-        console.log('No account name set, skipping fetch');
-        return;
+      console.log('No account name set, skipping fetch');
+      return;
+    }
+    
+    // Don't fetch if we're already loading
+    if (isLoading) {
+      return;
     }
     
     setIsLoading(true);
@@ -320,42 +389,47 @@ const LibreExplorer = () => {
     setActions([]);
     
     try {
-        console.log('Fetching ABI for account:', accountName);
-        // Get ABI data
-        const abiResponse = await fetchWithCorsHandling(
-            '/v1/chain/get_abi',
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ account_name: accountName }),
-            }
-        );
-        const abiData = await abiResponse.json();
-        console.log('Full ABI data:', abiData); // Debug log
-        setAbiData(abiData); // Store the full ABI data
-        
-        if (!abiData.abi) {
-            console.log('No ABI found for account:', accountName);
-            setError(`No ABI found for account: ${accountName}`);
-            return;
+      console.log('Fetching ABI for account:', accountName);
+      // Get ABI data
+      const abiResponse = await fetchWithCorsHandling(
+        '/v1/chain/get_abi',
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_name: accountName }),
         }
+      );
+      
+      const abiData = await abiResponse.json();
+      console.log('Full ABI data:', abiData);
+      
+      if (!abiData.abi) {
+        console.log('No ABI found for account:', accountName);
+        setError(`No ABI found for account: ${accountName}`);
+        setTables([]);
+        setActions([]);
+        return;
+      }
 
-        // Get actions from the ABI
-        const abiActions = abiData.abi?.actions || [];
-        console.log('Setting actions:', abiActions);
-        setActions(abiActions);
-        
-        // Get tables from the ABI
-        const abiTables = abiData.abi?.tables || [];
-        console.log('Setting tables:', abiTables);
-        setTables(abiTables.map(table => table.name));
+      setAbiData(abiData);
+      
+      // Get actions from the ABI
+      const abiActions = abiData.abi?.actions || [];
+      console.log('Setting actions:', abiActions);
+      setActions(abiActions);
+      
+      // Get tables from the ABI
+      const abiTables = abiData.abi?.tables || [];
+      console.log('Setting tables:', abiTables);
+      setTables(abiTables.map(table => table.name));
 
     } catch (error) {
-        console.error('Error in fetchTables:', error);
-        setError(error.message);
-        setTables([]);
+      console.error('Error in fetchTables:', error);
+      setError(error.message);
+      setTables([]);
+      setActions([]);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -911,11 +985,40 @@ const LibreExplorer = () => {
         }));
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         const paramsJson = JSON.stringify(actionParams);
-        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
-        setActionCommand(cleosCommand);
-        setShowActionCommand(true);
+        
+        if (walletSession) {
+            try {
+                // Create the action object for wallet signing
+                const action = {
+                    account: accountName,
+                    name: selectedAction.name,
+                    authorization: [{ 
+                        actor: walletSession.actor.toString(), 
+                        permission: 'active' 
+                    }],
+                    data: actionParams
+                };
+
+                // Sign and broadcast the transaction
+                const result = await walletSession.transact(
+                    { actions: [action] },
+                    { broadcast: true }
+                );
+                
+                console.log('Transaction Result:', result);
+                // You might want to show a success message to the user
+            } catch (error) {
+                console.error('Transaction failed:', error);
+                // You might want to show an error message to the user
+            }
+        } else {
+            // Show cleos command if no wallet is connected
+            const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
+            setActionCommand(cleosCommand);
+            setShowActionCommand(true);
+        }
     };
 
     return (
@@ -1026,8 +1129,92 @@ const LibreExplorer = () => {
     updateURL();
   };
 
+  const handleSessionKitLogin = async (type) => {
+    if (!chainId) {
+      console.error('Chain ID not available');
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      setShowWalletModal(false);
+      
+      const sessionKitArgs = {
+        appName: "Libre Explorer",
+        chains: [{
+          id: chainId,
+          url: getApiEndpoint()
+        }],
+        ui: new WebRenderer(),
+        walletPlugins: [new WalletPluginBitcoinLibre(), new WalletPluginAnchor()]
+      };
+
+      const sessionKit = new SessionKit(sessionKitArgs);
+      const { session } = await sessionKit.login({
+        walletPlugin: type,
+      });
+
+      if (session && session.permissionLevel) {
+        setWalletSession(session);
+        console.log('Wallet connected:', session);
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const connectWallet = () => setShowWalletModal(true);
+
+  const disconnectWallet = async () => {
+    if (walletSession) {
+      try {
+        const sessionKitArgs = {
+          appName: "Libre Explorer",
+          chains: [{
+            id: chainId,
+            url: getApiEndpoint()
+          }],
+          walletPlugins: [new WalletPluginBitcoinLibre(), new WalletPluginAnchor()]
+        };
+        
+        const sessionKit = new SessionKit(sessionKitArgs);
+        await sessionKit.logout(walletSession);
+      } catch (error) {
+        console.error('Error disconnecting wallet:', error);
+      }
+    }
+    setWalletSession(null);
+  };
+
   return (
     <div className="container-fluid">
+      <div className="d-flex justify-content-between align-items-center mb-4" style={{ marginRight: '20%' }}>
+        <h2 className="text-3xl font-bold">Smart Contract Explorer</h2>
+        <Button
+          variant={walletSession ? "success" : "outline-primary"}
+          onClick={walletSession ? disconnectWallet : connectWallet}
+          disabled={isConnecting}
+        >
+          {isConnecting ? (
+            <>
+              <Spinner size="sm" className="me-2" />
+              Connecting...
+            </>
+          ) : walletSession ? (
+            <>
+              <i className="bi bi-wallet2 me-2"></i>
+              {walletSession.actor.toString()}
+            </>
+          ) : (
+            <>
+              <i className="bi bi-wallet2 me-2"></i>
+              Connect Wallet
+            </>
+          )}
+        </Button>
+      </div>
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
         <div style={{  width: '100%' }}>
           <h2 className="text-3xl font-bold mb-6">Smart Contract Explorer</h2>
@@ -1347,6 +1534,33 @@ const LibreExplorer = () => {
           </Form>
         </div>
       </div>
+
+      {/* Add Wallet Selection Modal */}
+      <Modal show={showWalletModal} onHide={() => setShowWalletModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Select Wallet</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="d-grid gap-2">
+            <Button
+              variant="outline-primary"
+              onClick={() => handleSessionKitLogin("bitcoin-libre")}
+              disabled={isConnecting}
+            >
+              <i className="bi bi-wallet2 me-2"></i>
+              Bitcoin Libre Wallet
+            </Button>
+            <Button
+              variant="outline-primary"
+              onClick={() => handleSessionKitLogin("anchor")}
+              disabled={isConnecting}
+            >
+              <i className="bi bi-wallet2 me-2"></i>
+              Anchor Wallet
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };
