@@ -48,6 +48,8 @@ const LibreExplorer = () => {
   const [view, setView] = useState('tables');
   const [actions, setActions] = useState([]);
   const [abiData, setAbiData] = useState(null);
+  const [showActionCommand, setShowActionCommand] = useState(false);
+  const [actionCommand, setActionCommand] = useState('');
 
   // Add useEffect for autofocus
   useEffect(() => {
@@ -788,7 +790,8 @@ const LibreExplorer = () => {
     const [selectedAction, setSelectedAction] = useState(null);
     const [actionParams, setActionParams] = useState({});
     const [paramErrors, setParamErrors] = useState({});
-    const [showToast, setShowToast] = useState(false);
+    const [showActionCommand, setShowActionCommand] = useState(false);
+    const [actionCommand, setActionCommand] = useState('');
 
     const findStructForAction = (actionType) => {
         const struct = abiData?.abi?.structs?.find(s => s.name === actionType);
@@ -797,31 +800,97 @@ const LibreExplorer = () => {
 
     const handleActionSelect = (action) => {
         setSelectedAction(action);
-        // Reset params and errors when selecting a new action
         setActionParams({});
         setParamErrors({});
+        setShowActionCommand(false); // Reset command display when selecting new action
     };
 
     const validateField = (type, value) => {
-        if (!value) return "Field is required";
-        
-        switch (type) {
+        // Allow empty values during typing
+        if (!value) return null;
+
+        // Extract base type and size (if any)
+        const [baseType, size] = type.split('_');
+
+        switch (baseType.toLowerCase()) {
             case 'name':
-                return /^[a-z1-5.]{1,12}$/.test(value) ? null : "Invalid name format";
-            case 'uint64':
-                return /^\d+$/.test(value) && parseInt(value) >= 0 ? null : "Must be a positive number";
+                return isValidLibreAccount(value) ? null : "Invalid account name. Must be 1-12 chars using a-z, 1-5, and dots.";
+
+            case 'uint':
+            case 'uint8':
             case 'uint16':
-                return /^\d+$/.test(value) && parseInt(value) >= 0 && parseInt(value) <= 65535 ? null : "Must be a number between 0 and 65535";
+            case 'uint32':
+            case 'uint64':
+                if (!/^\d+$/.test(value)) {
+                    return "Must be a positive number";
+                }
+                const num = BigInt(value);
+                const maxValues = {
+                    'uint8': BigInt('255'),
+                    'uint16': BigInt('65535'),
+                    'uint32': BigInt('4294967295'),
+                    'uint64': BigInt('18446744073709551615'),
+                    'uint': BigInt('18446744073709551615') // Default to uint64 max
+                };
+                const maxVal = maxValues[baseType] || maxValues.uint;
+                return num <= maxVal ? null : `Must be between 0 and ${maxVal.toString()}`;
+
+            case 'int':
+            case 'int8':
+            case 'int16':
+            case 'int32':
+            case 'int64':
+                if (!/^-?\d+$/.test(value)) {
+                    return "Must be a number";
+                }
+                const intNum = BigInt(value);
+                const intMaxValues = {
+                    'int8': { min: BigInt('-128'), max: BigInt('127') },
+                    'int16': { min: BigInt('-32768'), max: BigInt('32767') },
+                    'int32': { min: BigInt('-2147483648'), max: BigInt('2147483647') },
+                    'int64': { min: BigInt('-9223372036854775808'), max: BigInt('9223372036854775807') },
+                    'int': { min: BigInt('-9223372036854775808'), max: BigInt('9223372036854775807') } // Default to int64
+                };
+                const { min, max } = intMaxValues[baseType] || intMaxValues.int;
+                return (intNum >= min && intNum <= max) ? null : `Must be between ${min.toString()} and ${max.toString()}`;
+
+            case 'float':
+            case 'double':
+                return /^-?\d*\.?\d*$/.test(value) ? null : "Must be a valid decimal number";
+
+            case 'bool':
+                return /^(true|false|0|1)$/.test(value.toLowerCase()) ? null : "Must be true/false or 1/0";
+
             case 'asset':
+                // Format: "1.0000 SYMBOL" (4 decimals, symbol 1-7 chars)
                 return /^\d+\.?\d*\s[A-Z]{1,7}$/.test(value) ? null : "Invalid asset format (e.g., '1.0000 LIBRE')";
-            case 'string':
-                return value.length > 0 ? null : "String cannot be empty";
+
+            case 'symbol':
+                // Symbol format: 3,LIBRE or LIBRE
+                return /^(\d+,)?[A-Z]{1,7}$/.test(value) ? null : "Invalid symbol format (e.g., '4,LIBRE' or 'LIBRE')";
+
+            case 'time':
+            case 'time_point':
             case 'time_point_sec':
-                // Check if it's a valid Unix timestamp (positive integer)
-                return /^\d+$/.test(value) && parseInt(value) >= 0 ? null : "Must be a Unix timestamp (seconds since epoch)";
+                // Accept Unix timestamp or ISO date string
+                return /^\d+$/.test(value) || !isNaN(Date.parse(value)) ? null : "Invalid time format (use Unix timestamp or ISO date)";
+
             case 'checksum256':
-                return /^[a-f0-9]{64}$/.test(value) ? null : "Invalid checksum (64 hex characters)";
+                return /^[a-f0-9]{64}$/.test(value) ? null : "Must be 64 hexadecimal characters";
+
+            case 'public_key':
+                // Basic EOS public key format check
+                return /^(EOS|PUB_K1_)[a-zA-Z0-9]+$/.test(value) ? null : "Invalid public key format";
+
+            case 'signature':
+                // Basic EOS signature format check
+                return /^SIG_K1_[a-zA-Z0-9]+$/.test(value) ? null : "Invalid signature format";
+
+            case 'string':
+                return null; // Accept any string
+
             default:
+                // For any unspecified types, don't enforce validation
                 return null;
         }
     };
@@ -843,8 +912,10 @@ const LibreExplorer = () => {
     };
 
     const handleSubmit = () => {
-        setShowToast(true);
-        console.log('Action params:', actionParams);
+        const paramsJson = JSON.stringify(actionParams);
+        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
+        setActionCommand(cleosCommand);
+        setShowActionCommand(true);
     };
 
     return (
@@ -883,9 +954,7 @@ const LibreExplorer = () => {
                                     className={`form-control ${paramErrors[field.name] ? 'is-invalid' : ''}`}
                                     value={actionParams[field.name] || ''}
                                     onChange={(e) => handleParamChange(field.name, e.target.value)}
-                                    placeholder={field.type === 'time_point_sec' ? 
-                                        `Current timestamp: ${Math.floor(Date.now() / 1000)}` : 
-                                        `Enter ${field.type}`}
+                                    placeholder={`Enter ${field.type}`}
                                 />
                                 {paramErrors[field.name] && (
                                     <div className="invalid-feedback">
@@ -902,22 +971,20 @@ const LibreExplorer = () => {
                             Submit Action
                         </Button>
                     </div>
+
+                    {/* Command Display */}
+                    {showActionCommand && (
+                        <div className="card-footer">
+                            <Alert variant="info" className="mb-0">
+                                <div>Execute this action using:</div>
+                                <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+                                    {actionCommand}
+                                </code>
+                            </Alert>
+                        </div>
+                    )}
                 </div>
             )}
-
-            <ToastContainer position="bottom-end" className="p-3">
-                <Toast 
-                    onClose={() => setShowToast(false)} 
-                    show={showToast} 
-                    delay={3000} 
-                    autohide
-                >
-                    <Toast.Header>
-                        <strong className="me-auto">Action Submission</strong>
-                    </Toast.Header>
-                    <Toast.Body>Coming soon!</Toast.Body>
-                </Toast>
-            </ToastContainer>
         </div>
     );
   };
