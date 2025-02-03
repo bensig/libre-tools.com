@@ -58,6 +58,7 @@ const LibreExplorer = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [chainId, setChainId] = useState(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [txNotification, setTxNotification] = useState(null);
 
   const networks = {
     mainnet: {
@@ -68,6 +69,36 @@ const LibreExplorer = () => {
       chainId: '73e2c46a3cb531e3e981e5ac2e4c0dcd4a286cb649aeaf8c087f370eb44e7e2c',
       rpcEndpoint: 'https://testnet.libre.org',
     }
+  };
+
+  // Network config first
+  const NETWORK_CONFIG = {
+    mainnet: {
+      api: 'https://lb.libre.org',
+      explorer: 'https://www.libreblocks.io'
+    },
+    testnet: {
+      api: 'https://testnet.libre.org',
+      explorer: 'https://testnet.libreblocks.io'
+    }
+  };
+
+  // Helper functions need to be defined before components that use them
+  const getBlockExplorerUrl = (txId) => {
+    if (!txId || typeof txId !== 'string') {
+      console.log('Invalid txId for explorer URL:', txId);
+      return '';
+    }
+    const baseUrl = NETWORK_CONFIG[network]?.explorer;
+    return baseUrl ? `${baseUrl}/tx/${txId}` : '';
+  };
+
+  const truncateTxId = (txId) => {
+    if (!txId || typeof txId !== 'string') {
+      console.log('Invalid txId received:', txId);
+      return '';
+    }
+    return `${txId.slice(0, 4)}-${txId.slice(-4)}`;
   };
 
   // Add useEffect for autofocus
@@ -306,6 +337,11 @@ const LibreExplorer = () => {
 
     fetchChainId();
   }, [network, customEndpoint]); // Trigger when network or customEndpoint changes
+
+  // Add debug logging for notification state changes
+  useEffect(() => {
+    console.log('Transaction notification changed:', txNotification);
+  }, [txNotification]);
 
   const getApiEndpoint = () => {
     if (network === 'custom') {
@@ -986,39 +1022,69 @@ const LibreExplorer = () => {
     };
 
     const handleSubmit = async () => {
-        const paramsJson = JSON.stringify(actionParams);
-        
-        if (walletSession) {
-            try {
-                // Create the action object for wallet signing
-                const action = {
-                    account: accountName,
-                    name: selectedAction.name,
-                    authorization: [{ 
-                        actor: walletSession.actor.toString(), 
-                        permission: 'active' 
-                    }],
-                    data: actionParams
-                };
+      console.log('ActionsList handleSubmit called');
+      const paramsJson = JSON.stringify(actionParams);
+      
+      if (walletSession) {
+        try {
+          console.log('Starting transaction in ActionsList...');
+          setTxNotification({ type: 'info', message: 'Transaction in progress...' });
+          
+          const action = {
+            account: accountName,
+            name: selectedAction.name,
+            authorization: [{ 
+              actor: walletSession.actor.toString(), 
+              permission: 'active' 
+            }],
+            data: actionParams
+          };
 
-                // Sign and broadcast the transaction
-                const result = await walletSession.transact(
-                    { actions: [action] },
-                    { broadcast: true }
-                );
-                
-                console.log('Transaction Result:', result);
-                // You might want to show a success message to the user
-            } catch (error) {
-                console.error('Transaction failed:', error);
-                // You might want to show an error message to the user
-            }
-        } else {
-            // Show cleos command if no wallet is connected
-            const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
-            setActionCommand(cleosCommand);
-            setShowActionCommand(true);
+          console.log('Sending transaction:', action);
+          const result = await walletSession.transact(
+            { actions: [action] },
+            { broadcast: true }
+          );
+          
+          // Debug log the full result structure
+          console.log('Full transaction result:', result);
+          
+          // Extract transaction ID from the response structure
+          const txId = result?.response?.transaction_id || 
+                      result?.resolved?.response?.transaction_id ||
+                      result?.resolved?.transaction?.id;
+          
+          console.log('Extracted transaction ID:', txId, 'Type:', typeof txId);
+          
+          if (!txId || typeof txId !== 'string') {
+            console.warn('Invalid transaction ID received:', txId);
+            setTxNotification({
+              type: 'success',
+              message: 'Transaction successful! (Transaction ID unavailable)'
+            });
+            return;
+          }
+          
+          // Show success notification with explorer link
+          setTxNotification({
+            type: 'success',
+            message: 'Transaction successful!',
+            txId: txId
+          });
+          
+        } catch (error) {
+          console.error('Transaction error:', error);
+          setTxNotification({
+            type: 'error',
+            message: error.message || 'Transaction failed'
+          });
         }
+      } else {
+        // Show cleos command if no wallet is connected
+        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
+        setActionCommand(cleosCommand);
+        setShowActionCommand(true);
+      }
     };
 
     return (
@@ -1188,6 +1254,76 @@ const LibreExplorer = () => {
     setWalletSession(null);
   };
 
+  // Modify TransactionNotification to add debug info and prevent auto-dismiss
+  const TransactionNotification = ({ notification, onClose }) => {
+    console.log('Rendering notification:', notification);
+    
+    if (!notification) return null;
+
+    const borderColors = {
+      info: '#0d6efd',    // Bootstrap primary blue
+      success: '#198754', // Bootstrap success green
+      error: '#dc3545'    // Bootstrap danger red
+    };
+
+    const handleCopy = async (txId) => {
+      try {
+        await navigator.clipboard.writeText(txId);
+        console.log('Transaction ID copied:', txId);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    };
+
+    return (
+      <Alert 
+        dismissible 
+        onClose={onClose}
+        className="position-fixed bottom-0 end-0 m-3 bg-white"
+        style={{ 
+          zIndex: 1050,
+          minWidth: '300px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          border: `2px solid ${borderColors[notification.type]}`,
+          color: '#212529', // Bootstrap default text color
+          padding: '1rem'
+        }}
+      >
+        <div className="d-flex flex-column gap-2">
+          <div>
+            {notification.type === 'success' && notification.txId ? (
+              <>Transaction Successful: {truncateTxId(notification.txId)}</>
+            ) : (
+              notification.message
+            )}
+          </div>
+          {notification.txId && (
+            <div className="d-flex gap-2">
+              <Button
+                size="sm"
+                variant="outline-primary"
+                onClick={() => handleCopy(notification.txId)}
+                className="btn-sm"
+              >
+                Copy
+              </Button>
+              <Button
+                size="sm"
+                variant="outline-primary"
+                href={getBlockExplorerUrl(notification.txId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-sm"
+              >
+                View TX
+              </Button>
+            </div>
+          )}
+        </div>
+      </Alert>
+    );
+  };
+
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4" style={{ marginRight: '20%' }}>
@@ -1216,13 +1352,11 @@ const LibreExplorer = () => {
         </Button>
       </div>
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
-        <div style={{  width: '100%' }}>
-          <h2 className="text-3xl font-bold mb-6">Smart Contract Explorer</h2>
-          
+        <div style={{ width: '100%' }}>
           <div className="alert alert-info mb-4 d-flex">
             <i className="bi bi-info-circle me-2"></i>
             <div>
-              Enter a contract account name to explore its tables and data
+              Enter a contract account name to explore its tables and actions.
               <div className="mt-2">
                 Try one of these examples:{' '}
                 {EXAMPLE_ACCOUNTS.map((account, index) => (
@@ -1561,6 +1695,20 @@ const LibreExplorer = () => {
           </div>
         </Modal.Body>
       </Modal>
+
+      {/* Add TransactionNotification component with debug info */}
+      {txNotification && (
+        <div className="debug-info" style={{ display: 'none' }}>
+          Notification active: {JSON.stringify(txNotification)}
+        </div>
+      )}
+      <TransactionNotification 
+        notification={txNotification}
+        onClose={() => {
+          console.log('Closing notification');
+          setTxNotification(null);
+        }}
+      />
     </div>
   );
 };
