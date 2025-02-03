@@ -59,6 +59,9 @@ const LibreExplorer = () => {
   const [chainId, setChainId] = useState(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [txNotification, setTxNotification] = useState(null);
+  const [selectedAction, setSelectedAction] = useState(null);
+  const [actionParams, setActionParams] = useState({});
+  const [paramErrors, setParamErrors] = useState({});
 
   const networks = {
     mainnet: {
@@ -293,7 +296,7 @@ const LibreExplorer = () => {
     }
   }, [urlView, urlItem, urlScope, accountName]);
 
-  // Add this useEffect to monitor accountName changes
+  // Add this useEffect for accountName changes
   useEffect(() => {
     console.log('Account name changed to:', accountName);
   }, [accountName]);
@@ -342,6 +345,14 @@ const LibreExplorer = () => {
   useEffect(() => {
     console.log('Transaction notification changed:', txNotification);
   }, [txNotification]);
+
+  // Add network to dependency array for wallet connection
+  useEffect(() => {
+    // Disconnect wallet when network changes
+    if (walletSession && network) {
+      disconnectWallet();
+    }
+  }, [network]);
 
   const getApiEndpoint = () => {
     if (network === 'custom') {
@@ -567,6 +578,21 @@ const LibreExplorer = () => {
       setError('Invalid account name. Must be 1-12 characters, only a-z, 1-5, and dots allowed.');
       return;
     }
+    
+    // Clear all state when changing accounts
+    setSelectedTable(null);
+    setScope(null);
+    setRows([]);
+    setScopes([]);
+    setView('tables'); // Reset to tables view
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    setWarningMessage(null);
+    setError(null);
+    setIsInitialLoad(true);
+    setSearchKey('');
+    setIsSearching(false);
     
     fetchTables();
     updateURL();
@@ -861,10 +887,35 @@ const LibreExplorer = () => {
     }
   };
 
-  // Add lowercase enforcement to account name input
+  // Add lowercase enforcement to account name input and clear state immediately
   const handleAccountNameChange = (e) => {
     const value = e.target.value.toLowerCase();
+    
+    // Clear all state as soon as user starts typing
+    setSelectedTable(null);
+    setScope(null);
+    setRows([]);
+    setScopes([]);
+    setView('tables');
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    setWarningMessage(null);
+    setError(null);
+    setIsInitialLoad(true);
+    setSearchKey('');
+    setIsSearching(false);
+    setTables([]);
+    setActions([]);
+    
     setAccountName(value);
+    
+    // Immediately update URL with just the network and new account name
+    const baseUrl = '/explorer/' + network;
+    navigate(network === 'custom' ? 
+      `${baseUrl}/${customEndpoint}/${value}` : 
+      `${baseUrl}/${value}`
+    );
   };
 
   // Modify handleCustomScopeChange to remove toLowerCase()
@@ -896,269 +947,281 @@ const LibreExplorer = () => {
     return true;
   };
 
-  const ActionsList = ({ actions, abiData }) => {
-    const [selectedAction, setSelectedAction] = useState(null);
-    const [actionParams, setActionParams] = useState({});
-    const [paramErrors, setParamErrors] = useState({});
-    const [showActionCommand, setShowActionCommand] = useState(false);
-    const [actionCommand, setActionCommand] = useState('');
-
-    const findStructForAction = (actionType) => {
-        const struct = abiData?.abi?.structs?.find(s => s.name === actionType);
-        return struct?.fields || [];
-    };
-
-    const handleActionSelect = (action) => {
-        setSelectedAction(action);
-        setActionParams({});
-        setParamErrors({});
-        setShowActionCommand(false); // Reset command display when selecting new action
-    };
-
-    const validateField = (type, value) => {
-        // Allow empty values during typing
-        if (!value) return null;
-
-        // Extract base type and size (if any)
-        const [baseType, size] = type.split('_');
-
-        switch (baseType.toLowerCase()) {
-            case 'name':
-                return isValidLibreAccount(value) ? null : "Invalid account name. Must be 1-12 chars using a-z, 1-5, and dots.";
-
-            case 'uint':
-            case 'uint8':
-            case 'uint16':
-            case 'uint32':
-            case 'uint64':
-                if (!/^\d+$/.test(value)) {
-                    return "Must be a positive number";
-                }
-                const num = BigInt(value);
-                const maxValues = {
-                    'uint8': BigInt('255'),
-                    'uint16': BigInt('65535'),
-                    'uint32': BigInt('4294967295'),
-                    'uint64': BigInt('18446744073709551615'),
-                    'uint': BigInt('18446744073709551615') // Default to uint64 max
-                };
-                const maxVal = maxValues[baseType] || maxValues.uint;
-                return num <= maxVal ? null : `Must be between 0 and ${maxVal.toString()}`;
-
-            case 'int':
-            case 'int8':
-            case 'int16':
-            case 'int32':
-            case 'int64':
-                if (!/^-?\d+$/.test(value)) {
-                    return "Must be a number";
-                }
-                const intNum = BigInt(value);
-                const intMaxValues = {
-                    'int8': { min: BigInt('-128'), max: BigInt('127') },
-                    'int16': { min: BigInt('-32768'), max: BigInt('32767') },
-                    'int32': { min: BigInt('-2147483648'), max: BigInt('2147483647') },
-                    'int64': { min: BigInt('-9223372036854775808'), max: BigInt('9223372036854775807') },
-                    'int': { min: BigInt('-9223372036854775808'), max: BigInt('9223372036854775807') } // Default to int64
-                };
-                const { min, max } = intMaxValues[baseType] || intMaxValues.int;
-                return (intNum >= min && intNum <= max) ? null : `Must be between ${min.toString()} and ${max.toString()}`;
-
-            case 'float':
-            case 'double':
-                return /^-?\d*\.?\d*$/.test(value) ? null : "Must be a valid decimal number";
-
-            case 'bool':
-                return /^(true|false|0|1)$/.test(value.toLowerCase()) ? null : "Must be true/false or 1/0";
-
-            case 'asset':
-                // Format: "1.0000 SYMBOL" (4 decimals, symbol 1-7 chars)
-                return /^\d+\.?\d*\s[A-Z]{1,7}$/.test(value) ? null : "Invalid asset format (e.g., '1.0000 LIBRE')";
-
-            case 'symbol':
-                // Symbol format: 3,LIBRE or LIBRE
-                return /^(\d+,)?[A-Z]{1,7}$/.test(value) ? null : "Invalid symbol format (e.g., '4,LIBRE' or 'LIBRE')";
-
-            case 'time':
-            case 'time_point':
-            case 'time_point_sec':
-                // Accept Unix timestamp or ISO date string
-                return /^\d+$/.test(value) || !isNaN(Date.parse(value)) ? null : "Invalid time format (use Unix timestamp or ISO date)";
-
-            case 'checksum256':
-                return /^[a-f0-9]{64}$/.test(value) ? null : "Must be 64 hexadecimal characters";
-
-            case 'public_key':
-                // Basic EOS public key format check
-                return /^(EOS|PUB_K1_)[a-zA-Z0-9]+$/.test(value) ? null : "Invalid public key format";
-
-            case 'signature':
-                // Basic EOS signature format check
-                return /^SIG_K1_[a-zA-Z0-9]+$/.test(value) ? null : "Invalid signature format";
-
-            case 'string':
-                return null; // Accept any string
-
-            default:
-                // For any unspecified types, don't enforce validation
-                return null;
-        }
-    };
-
-    const handleParamChange = (field, value) => {
-        setActionParams(prev => ({
-            ...prev,
-            [field]: value
-        }));
-
-        const fields = findStructForAction(selectedAction.type);
-        const fieldDef = fields.find(f => f.name === field);
-        const error = validateField(fieldDef.type, value);
-
-        setParamErrors(prev => ({
-            ...prev,
-            [field]: error
-        }));
-    };
-
-    const handleSubmit = async () => {
-      console.log('ActionsList handleSubmit called');
-      const paramsJson = JSON.stringify(actionParams);
-      
-      if (walletSession) {
-        try {
-          console.log('Starting transaction in ActionsList...');
-          setTxNotification({ type: 'info', message: 'Transaction in progress...' });
-          
-          const action = {
-            account: accountName,
-            name: selectedAction.name,
-            authorization: [{ 
-              actor: walletSession.actor.toString(), 
-              permission: 'active' 
-            }],
-            data: actionParams
-          };
-
-          console.log('Sending transaction:', action);
-          const result = await walletSession.transact(
-            { actions: [action] },
-            { broadcast: true }
-          );
-          
-          // Debug log the full result structure
-          console.log('Full transaction result:', result);
-          
-          // Extract transaction ID from the response structure
-          const txId = result?.response?.transaction_id || 
-                      result?.resolved?.response?.transaction_id ||
-                      result?.resolved?.transaction?.id;
-          
-          console.log('Extracted transaction ID:', txId, 'Type:', typeof txId);
-          
-          if (!txId || typeof txId !== 'string') {
-            console.warn('Invalid transaction ID received:', txId);
-            setTxNotification({
-              type: 'success',
-              message: 'Transaction successful! (Transaction ID unavailable)'
-            });
-            return;
-          }
-          
-          // Show success notification with explorer link
-          setTxNotification({
-            type: 'success',
-            message: 'Transaction successful!',
-            txId: txId
-          });
-          
-        } catch (error) {
-          console.error('Transaction error:', error);
-          setTxNotification({
-            type: 'error',
-            message: error.message || 'Transaction failed'
-          });
-        }
-      } else {
-        // Show cleos command if no wallet is connected
-        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction.name} '${paramsJson}' -p ${accountName}@active`;
-        setActionCommand(cleosCommand);
-        setShowActionCommand(true);
-      }
-    };
-
-    return (
-        <div className="mt-3">
-            {/* Action Buttons */}
-            <div className="mb-3">
-                <label className="form-label">Actions</label>
-                <div className="d-flex gap-2 flex-wrap">
-                    {actions.map(action => (
-                        <Button
-                            key={action.name}
-                            variant={selectedAction?.name === action.name ? "primary" : "outline-primary"}
-                            onClick={() => handleActionSelect(action)}
-                            className="mb-2"
-                        >
-                            {action.name}
-                        </Button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Action Parameters Form */}
-            {selectedAction && (
-                <div className="card">
-                    <div className="card-header">
-                        <h5 className="mb-0">{selectedAction.name}</h5>
-                    </div>
-                    <div className="card-body">
-                        {findStructForAction(selectedAction.type).map(field => (
-                            <div key={field.name} className="mb-3">
-                                <label className="form-label">
-                                    {field.name} <small className="text-muted">({field.type})</small>
-                                </label>
-                                <input
-                                    type="text"
-                                    className={`form-control ${paramErrors[field.name] ? 'is-invalid' : ''}`}
-                                    value={actionParams[field.name] || ''}
-                                    onChange={(e) => handleParamChange(field.name, e.target.value)}
-                                    placeholder={`Enter ${field.type}`}
-                                />
-                                {paramErrors[field.name] && (
-                                    <div className="invalid-feedback">
-                                        {paramErrors[field.name]}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                        <Button 
-                            variant="primary"
-                            onClick={handleSubmit}
-                            disabled={Object.keys(paramErrors).some(key => paramErrors[key])}
-                        >
-                            Submit Action
-                        </Button>
-                    </div>
-
-                    {/* Command Display */}
-                    {showActionCommand && (
-                        <div className="card-footer">
-                            <Alert variant="info" className="mb-0">
-                                <div>Execute this action using:</div>
-                                <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                                    {actionCommand}
-                                </code>
-                            </Alert>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+  const findStructForAction = (actionName) => {
+    console.log('Finding struct for action:', actionName);
+    console.log('ABI data:', abiData);
+    
+    if (!abiData?.abi?.structs) {
+      console.log('No ABI structs found');
+      return [];
+    }
+    
+    // First find the action to get its type
+    const action = abiData.abi.actions.find(a => a.name === actionName);
+    console.log('Found action:', action);
+    
+    if (!action) {
+      console.log('No action found for name:', actionName);
+      return [];
+    }
+    
+    // Then find the struct using the action's type
+    const struct = abiData.abi.structs.find(s => s.name === action.type);
+    console.log('Found struct:', struct);
+    
+    return struct?.fields || [];
   };
 
-  // Add this function to update URL when state changes
+  const handleActionSelect = (action) => {
+    console.log('Selecting action:', action);
+    
+    // Store just the action name since that's what we need for lookup
+    setSelectedAction(action.name);
+    setActionParams({});
+    setParamErrors({});
+    setShowActionCommand(false);
+    
+    // Update URL with action name
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${action.name}`;
+    
+    console.log('Navigating to:', url);
+    navigate(url);
+  };
+
+  const handleParamChange = (field, value) => {
+    setActionParams(prev => ({
+      ...prev,
+      [field]: value
+    }));
+
+    const fields = findStructForAction(selectedAction);
+    const fieldDef = fields.find(f => f.name === field);
+    const error = validateField(fieldDef.type, value);
+
+    setParamErrors(prev => ({
+      ...prev,
+      [field]: error
+    }));
+  };
+
+  const handleLocalSubmit = async () => {
+    // Update URL with parameters
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${selectedAction}`;
+    
+    // Add non-empty parameters to URL
+    const nonEmptyParams = Object.entries(actionParams)
+      .filter(([_, value]) => value !== '')
+      .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+    
+    if (Object.keys(nonEmptyParams).length > 0) {
+      const queryString = Object.entries(nonEmptyParams)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+        .join('&');
+      url += `?${queryString}`;
+    }
+    
+    navigate(url);
+
+    if (!walletSession) {
+      // Show cleos command if no wallet is connected
+      const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(actionParams)}' -p ${accountName}@active`;
+      setActionCommand(cleosCommand);
+      setShowActionCommand(true);
+      return; // Don't proceed with handleSubmit
+    }
+    
+    // Only call handleSubmit if wallet is connected
+    handleSubmit();
+  };
+
+  const handleSubmit = async () => {
+    console.log('ActionsList handleSubmit called');
+    
+    // Update URL with parameters before submitting
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${selectedAction}`;
+    
+    // Add non-empty parameters to URL
+    const nonEmptyParams = Object.entries(actionParams)
+      .filter(([_, value]) => value !== '')
+      .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+    
+    if (Object.keys(nonEmptyParams).length > 0) {
+      const queryString = Object.entries(nonEmptyParams)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+        .join('&');
+      url += `?${queryString}`;
+    }
+    
+    navigate(url);
+    
+    if (walletSession) {
+      try {
+        console.log('Starting transaction in ActionsList...');
+        setTxNotification({ type: 'info', message: 'Transaction in progress...' });
+        
+        const action = {
+          account: accountName,
+          name: selectedAction,
+          authorization: [{ 
+            actor: walletSession.actor.toString(), 
+            permission: 'active' 
+          }],
+          data: actionParams
+        };
+
+        console.log('Sending transaction:', action);
+        const result = await walletSession.transact(
+          { actions: [action] },
+          { broadcast: true }
+        );
+        
+        // Debug log the full result structure
+        console.log('Full transaction result:', result);
+        
+        // Extract transaction ID from the response structure
+        const txId = result?.response?.transaction_id || 
+                    result?.resolved?.response?.transaction_id ||
+                    result?.resolved?.transaction?.id;
+        
+        console.log('Extracted transaction ID:', txId, 'Type:', typeof txId);
+        
+        if (!txId || typeof txId !== 'string') {
+          console.warn('Invalid transaction ID received:', txId);
+          setTxNotification({
+            type: 'success',
+            message: 'Transaction successful! (Transaction ID unavailable)'
+          });
+          return;
+        }
+        
+        // Show success notification with explorer link
+        setTxNotification({
+          type: 'success',
+          message: 'Transaction successful!',
+          txId: txId
+        });
+        
+      } catch (error) {
+        console.error('Transaction error:', error);
+        setTxNotification({
+          type: 'error',
+          message: error.message || 'Transaction failed'
+        });
+      }
+    } else {
+      // Show cleos command if no wallet is connected
+      const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(actionParams)}' -p ${accountName}@active`;
+      setActionCommand(cleosCommand);
+      setShowActionCommand(true);
+    }
+  };
+
+  // Update handleViewChange to immediately update URL when switching views
+  const handleViewChange = (newView) => {
+    console.log('Switching view to:', newView);
+    
+    // Clear table-related state when switching views
+    setSelectedTable(null);
+    setScope(null);
+    setRows([]);
+    setScopes([]);
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    // Clear action-related state too
+    setSelectedAction(null);
+    setActionParams({});
+    
+    // Set the new view
+    setView(newView);
+    
+    // Immediately construct and navigate to new URL
+    let url = '/explorer';
+    if (network) {
+      url += `/${network}`;
+      if (accountName) {
+        if (network === 'custom') {
+          url += `/${customEndpoint}/${accountName}`;
+        } else {
+          url += `/${accountName}`;
+        }
+        url += `/${newView}`; // Add the new view to URL
+      }
+    }
+    
+    console.log('Navigating to:', url);
+    navigate(url);
+  };
+
+  // Update handleActionParamChange to include parameters in URL
+  const handleActionParamChange = (paramName, value) => {
+    const newParams = {
+      ...actionParams,
+      [paramName]: value
+    };
+    
+    // Remove empty parameters
+    Object.keys(newParams).forEach(key => {
+      if (!newParams[key]) {
+        delete newParams[key];
+      }
+    });
+    
+    setActionParams(newParams);
+    
+    // Construct URL with parameters
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${selectedAction}`;
+    
+    // Add parameters to URL if they exist
+    if (Object.keys(newParams).length > 0) {
+      const queryString = Object.entries(newParams)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+        .join('&');
+      url += `?${queryString}`;
+    }
+    
+    console.log('Updating URL with params:', url);
+    navigate(url);
+  };
+
+  // Update useEffect to handle URL parameters when loading
+  useEffect(() => {
+    if (urlView === 'actions' && urlItem) {
+      console.log('Loading action from URL:', urlItem);
+      setView('actions');
+      setSelectedAction(urlItem);
+      
+      // Parse URL parameters
+      const queryParams = new URLSearchParams(window.location.search);
+      const params = {};
+      queryParams.forEach((value, key) => {
+        params[key] = value;
+      });
+      
+      if (Object.keys(params).length > 0) {
+        console.log('Loading parameters from URL:', params);
+        setActionParams(params);
+      }
+    }
+  }, [urlView, urlItem]);
+
+  // Update updateURL to handle action paths
   const updateURL = () => {
     let url = '/explorer';
     
@@ -1175,11 +1238,26 @@ const LibreExplorer = () => {
         if (view) {
           url += `/${view}`;
           
-          if (selectedTable) {
-            url += `/${selectedTable}`;
+          if (view === 'tables' && selectedTable && scope) {
+            // Handle tables view URL
+            url += `/${selectedTable}/${scope}`;
+          } else if (view === 'actions' && selectedAction) {
+            // Handle actions view URL
+            url += `/${selectedAction}`;
             
-            if (scope) {
-              url += `/${scope}`;
+            // Add action parameters to URL if they exist
+            if (Object.keys(actionParams).length > 0) {
+              url += '/data';
+              const params = new URLSearchParams();
+              Object.entries(actionParams).forEach(([key, value]) => {
+                if (value !== '') {
+                  params.append(key, value);
+                }
+              });
+              const paramString = params.toString();
+              if (paramString) {
+                url += `?${paramString}`;
+              }
             }
           }
         }
@@ -1189,9 +1267,28 @@ const LibreExplorer = () => {
     navigate(url);
   };
 
-  // Add to your existing handleNetworkChange
+  // Update handleNetworkChange to disconnect wallet
   const handleNetworkChange = (newNetwork) => {
     setNetwork(newNetwork);
+    // Clear all state when changing networks
+    setAccountName('');
+    setSelectedTable(null);
+    setScope(null);
+    setRows([]);
+    setScopes([]);
+    setView('tables');
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    setWarningMessage(null);
+    setError(null);
+    setIsInitialLoad(true);
+    setSearchKey('');
+    setIsSearching(false);
+    // Disconnect wallet when changing networks
+    if (walletSession) {
+      disconnectWallet();
+    }
     updateURL();
   };
 
@@ -1399,14 +1496,8 @@ const LibreExplorer = () => {
                     value={accountName}
                     onChange={handleAccountNameChange}
                     isInvalid={accountName && !isValidLibreAccount(accountName)}
-                    placeholder=""
-                    autoFocus
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAccountSubmit(e);
-                      }
-                    }}
+                    placeholder="Enter contract account name"
+                    autoComplete="off"
                   />
                   <Button 
                     variant="primary"
@@ -1429,13 +1520,13 @@ const LibreExplorer = () => {
                     <div className="btn-group">
                         <Button
                             variant={view === 'tables' ? 'primary' : 'outline-primary'}
-                            onClick={() => setView('tables')}
+                            onClick={() => handleViewChange('tables')}
                         >
                             Tables {tables.length > 0 && `(${tables.length})`}
                         </Button>
                         <Button
                             variant={view === 'actions' ? 'primary' : 'outline-primary'}
-                            onClick={() => setView('actions')}
+                            onClick={() => handleViewChange('actions')}
                         >
                             Actions {actions.length > 0 && `(${actions.length})`}
                         </Button>
@@ -1646,7 +1737,28 @@ const LibreExplorer = () => {
                 </>
             ) : (
                 <>
-                    <ActionsList actions={actions} abiData={abiData} />
+                    <ActionsView 
+                        actions={actions} 
+                        abiData={abiData} 
+                        selectedAction={selectedAction} 
+                        setSelectedAction={setSelectedAction} 
+                        actionParams={actionParams} 
+                        setActionParams={setActionParams} 
+                        network={network} 
+                        customEndpoint={customEndpoint} 
+                        accountName={accountName}
+                        navigate={navigate}
+                        handleParamChange={handleParamChange}
+                        handleSubmit={handleLocalSubmit}
+                        paramErrors={paramErrors}
+                        setParamErrors={setParamErrors}
+                        setShowActionCommand={setShowActionCommand}
+                        walletSession={walletSession}
+                        setActionCommand={setActionCommand}
+                        actionCommand={actionCommand}
+                        showActionCommand={showActionCommand}
+                        getApiEndpoint={getApiEndpoint}
+                    />
                     {/* Debug output */}
                     <pre style={{display: 'none'}}>
                         {JSON.stringify({
@@ -1709,6 +1821,131 @@ const LibreExplorer = () => {
           setTxNotification(null);
         }}
       />
+    </div>
+  );
+};
+
+const ActionsView = ({ 
+  actions, 
+  abiData, 
+  selectedAction, 
+  setSelectedAction, 
+  actionParams, 
+  setActionParams, 
+  network, 
+  customEndpoint, 
+  accountName,
+  navigate,
+  handleParamChange,
+  handleSubmit,
+  paramErrors,
+  setParamErrors,
+  setShowActionCommand,
+  walletSession,
+  setActionCommand,
+  actionCommand,
+  showActionCommand,
+  getApiEndpoint
+}) => {
+  // Initialize local state if needed
+  const [localSelectedAction, setLocalSelectedAction] = useState(selectedAction);
+
+  const findStructForAction = (actionName) => {
+    if (!actionName || !abiData?.abi?.structs) {
+      return [];
+    }
+    
+    const action = abiData.abi.actions.find(a => a.name === actionName);
+    if (!action) return [];
+    
+    const struct = abiData.abi.structs.find(s => s.name === action.type);
+    return struct?.fields || [];
+  };
+
+  const handleActionSelect = (action) => {
+    const actionName = action.name;
+    setLocalSelectedAction(actionName);
+    setSelectedAction(actionName);
+    setActionParams({});
+    setParamErrors({});
+    setShowActionCommand(false);
+    
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${actionName}`;
+    
+    navigate(url);
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="mb-3">
+        <label className="form-label">Actions</label>
+        <div className="d-flex gap-2 flex-wrap">
+          {actions?.map(action => (
+            <Button
+              key={action.name}
+              variant={localSelectedAction === action.name ? "primary" : "outline-primary"}
+              onClick={() => handleActionSelect(action)}
+              className="mb-2"
+            >
+              {action.name}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {localSelectedAction && (
+        <div className="card">
+          <div className="card-header">
+            <h5 className="mb-0">{localSelectedAction}</h5>
+          </div>
+          <div className="card-body">
+            {findStructForAction(localSelectedAction).map(field => (
+              <div key={field.name} className="mb-3">
+                <label className="form-label">
+                  {field.name} <small className="text-muted">({field.type})</small>
+                </label>
+                <input
+                  type="text"
+                  className={`form-control ${paramErrors[field.name] ? 'is-invalid' : ''}`}
+                  value={actionParams[field.name] || ''}
+                  onChange={(e) => handleParamChange(field.name, e.target.value)}
+                  placeholder={`Enter ${field.type}`}
+                />
+                {paramErrors[field.name] && (
+                  <div className="invalid-feedback">
+                    {paramErrors[field.name]}
+                  </div>
+                )}
+              </div>
+            ))}
+            <Button 
+              variant="primary"
+              onClick={handleSubmit}
+              disabled={Object.keys(paramErrors).some(key => paramErrors[key])}
+            >
+              Submit Action
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Show cleos command if no wallet and command exists */}
+      {!walletSession && showActionCommand && actionCommand && (
+        <div className="mt-3">
+          <div className="card">
+            <div className="card-header">
+              <h5 className="mb-0">CLEOS Command</h5>
+            </div>
+            <div className="card-body">
+              <pre className="mb-0">{actionCommand}</pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
