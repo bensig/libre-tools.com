@@ -1025,34 +1025,50 @@ const LibreExplorer = () => {
     }));
   };
 
-  const handleLocalSubmit = async () => {
-    // Update URL with parameters
-    let url = `/explorer/${network}`;
-    if (network === 'custom') {
-      url += `/${customEndpoint}`;
-    }
-    url += `/${accountName}/actions/${selectedAction}`;
+  // Add this helper function to format parameter values
+  const formatParamValue = (type, value) => {
+    if (!value) return value;
     
-    // Add non-empty parameters to URL
-    const nonEmptyParams = Object.entries(actionParams)
-      .filter(([_, value]) => value !== '')
-      .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
-    
-    if (Object.keys(nonEmptyParams).length > 0) {
-      const queryString = Object.entries(nonEmptyParams)
-        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-        .join('&');
-      url += `?${queryString}`;
+    if (type === 'params' || type.includes('json')) {
+      try {
+        // Parse the input JSON
+        const parsed = JSON.parse(value);
+        
+        // Simply stringify the parsed object, no additional wrapping
+        return JSON.stringify(parsed);
+      } catch (e) {
+        console.warn('Failed to parse JSON parameter:', e);
+        return value;
+      }
     }
     
-    navigate(url);
+    return value;
+  };
 
+  // Update handleLocalSubmit to use the formatter
+  const handleLocalSubmit = async () => {
     if (!walletSession) {
-      // Show cleos command if no wallet is connected
-      const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(actionParams)}' -p ${accountName}@active`;
-      setActionCommand(cleosCommand);
-      setShowActionCommand(true);
-      return; // Don't proceed with handleSubmit
+      let params;
+      try {
+        // If we have a single parameter that's a JSON string, parse it first
+        if (Object.entries(actionParams).length === 1) {
+          const value = Object.values(actionParams)[0];
+          // Parse the input and get just the array part if it's wrapped in a p property
+          const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+          params = parsed.p || parsed;  // Use the array directly, whether it's in p or not
+        } else {
+          params = actionParams;
+        }
+        
+        // Create command with the array directly, not wrapped in an object
+        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(params)}' -p ${accountName}@active`;
+        setActionCommand(cleosCommand);
+        setShowActionCommand(true);
+      } catch (e) {
+        console.warn('Failed to parse JSON parameter:', e);
+        params = actionParams;
+      }
+      return;
     }
     
     // Only call handleSubmit if wallet is connected

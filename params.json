@@ -1,0 +1,1 @@
+[{"apr":900,"liquidation_fee":500,"libre_liquidation_fee":5000,"loan_duration_sec":2592000,"min_loan_amount":1000,"liquidation_risk_threshold":8000,"liquidation_warning_threshold":7000,"max_loan_to_value":6000,"loan_expiration_liquidation_threshold_sec":259200}]
