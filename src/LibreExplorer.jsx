@@ -910,13 +910,30 @@ const LibreExplorer = () => {
     
     setAccountName(value);
     
-    // Immediately update URL with just the network and new account name
-    const baseUrl = '/explorer/' + network;
-    navigate(network === 'custom' ? 
-      `${baseUrl}/${customEndpoint}/${value}` : 
-      `${baseUrl}/${value}`
-    );
+    // Only update URL and fetch ABI if we have at least 4 characters
+    // or if the field is completely empty
+    if (value.length >= 4 || value.length === 0) {
+      // Immediately update URL with just the network and new account name
+      const baseUrl = '/explorer/' + network;
+      navigate(network === 'custom' ? 
+        `${baseUrl}/${customEndpoint}/${value}` : 
+        `${baseUrl}/${value}`
+      );
+    }
   };
+
+  // Update useEffect for fetching ABI to respect the 4-character minimum
+  useEffect(() => {
+    if (accountName && accountName.length >= 4) {
+      console.log('Account name set, fetching tables:', accountName);
+      fetchABI();
+    } else if (accountName.length === 0) {
+      // Clear ABI data when account name is empty
+      setAbiData(null);
+      setTables([]);
+      setActions([]);
+    }
+  }, [accountName]);
 
   // Modify handleCustomScopeChange to remove toLowerCase()
   const handleCustomScopeChange = (e) => {
