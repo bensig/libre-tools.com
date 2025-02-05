@@ -16,6 +16,7 @@
     "@wharfkit/session": "^1.4.0",
     "@wharfkit/wallet-plugin-anchor": "^1.4.0",
     "@wharfkit/web-renderer": "^1.4.1",
+    "bip39": "^3.1.0",
     "bootstrap": "^5.3.3",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.7",

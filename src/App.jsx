@@ -4,6 +4,7 @@ import Home from './Home';
 import LibreExplorer from './LibreExplorer';
 import TransactionDownloader from './TransactionDownloader';
 import BtcTracker from './BtcTracker';
+import SeedGenerator from './SeedGenerator';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
                 <Route path="/explorer/:network/:contract/:view/:item/:scope" element={<LibreExplorer />} />
                 <Route path="/transactions" element={<TransactionDownloader />} />
                 <Route path="/btc-tracker" element={<BtcTracker />} />
+                <Route path="/seed-generator" element={<SeedGenerator />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>

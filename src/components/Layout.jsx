@@ -22,6 +22,7 @@ const Layout = ({ children }) => {
               <Nav.Link as={Link} to="/explorer" className="fs-6">Smart Contract Explorer</Nav.Link>
               <Nav.Link as={Link} to="/transactions" className="fs-6">Transaction History</Nav.Link>
               <Nav.Link as={Link} to="/btc-tracker" className="fs-6">BTC Tracker</Nav.Link>
+              <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed Generator</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>

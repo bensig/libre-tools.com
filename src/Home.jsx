@@ -17,6 +17,11 @@ const Home = () => {
       title: 'BTC Transaction Tracker',
       path: '/btc-tracker',
       description: 'Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks. Monitor cross-chain transaction status.'
+    },
+    {
+      title: 'Seed Generator',
+      path: '/seed-generator',
+      description: 'Generate a 128-bit or 256-bit seed phrase by moving your mouse to create entropy.'
     }
   ];
 
