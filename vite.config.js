@@ -10,10 +10,14 @@ export default defineConfig({
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            if (id.includes('react')) {
+            if (id.includes('react') || 
+                id.includes('scheduler') || 
+                id.includes('@remix-run') ||
+                id.includes('react-dom')) {
               return 'react-vendor'
             }
-            if (id.includes('bootstrap')) {
+            if (id.includes('bootstrap') || 
+                id.includes('@popperjs')) {
               return 'bootstrap-vendor'
             }
             return 'vendor'
