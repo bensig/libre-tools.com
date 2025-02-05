@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Button, Form, Alert } from 'react-bootstrap';
 import { WORDLIST } from './word-list';
 
@@ -10,10 +10,13 @@ function SeedGenerator() {
   const [showSeed, setShowSeed] = useState(false);
   const [error, setError] = useState('');
   const timeoutRef = useRef(null);
-  // Generate random target between 2000-5000 when component mounts
-  const [requiredEntropyPoints] = useState(
-    Math.floor(Math.random() * (5000 - 2000 + 1)) + 2000
-  );
+  
+  // Calculate required entropy points based on entropy bits
+  const requiredEntropyPoints = useMemo(() => {
+    return entropyBits === 128 
+      ? Math.floor(Math.random() * (500 - 100 + 1)) + 100    // 100-500 for 128 bits
+      : Math.floor(Math.random() * (2000 - 500 + 1)) + 500   // 500-2000 for 256 bits
+  }, [entropyBits]);
 
   const collectMouseEntropy = (event) => {
     if (isCollecting && entropy.length < requiredEntropyPoints) {
