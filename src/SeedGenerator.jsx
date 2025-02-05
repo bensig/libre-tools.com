@@ -20,13 +20,31 @@ function SeedGenerator() {
 
   const collectMouseEntropy = (event) => {
     if (isCollecting && entropy.length < requiredEntropyPoints) {
-      console.log('Collecting mouse entropy point:', entropy.length + 1);
-      setEntropy(prev => [...prev, {
-        type: 'mouse',
-        x: event.clientX,
-        y: event.clientY,
+      console.log('Collecting mouse/touch entropy point:', entropy.length + 1);
+      const point = {
+        type: 'pointer',
+        x: event.clientX || (event.touches && event.touches[0].clientX),
+        y: event.clientY || (event.touches && event.touches[0].clientY),
         timestamp: Date.now()
-      }]);
+      };
+      setEntropy(prev => [...prev, point]);
+    }
+  };
+
+  const collectTouchEntropy = (event) => {
+    if (isCollecting && entropy.length < requiredEntropyPoints) {
+      // Prevent scrolling while collecting entropy
+      event.preventDefault();
+      
+      // Collect entropy from all touch points
+      Array.from(event.touches).forEach(touch => {
+        setEntropy(prev => [...prev, {
+          type: 'pointer',
+          x: touch.clientX,
+          y: touch.clientY,
+          timestamp: Date.now()
+        }]);
+      });
     }
   };
 
@@ -142,12 +160,16 @@ function SeedGenerator() {
   };
 
   useEffect(() => {
-    // Add keyboard event listener when collecting
+    // Add keyboard and touch event listeners when collecting
     document.addEventListener('keydown', collectKeyboardEntropy);
+    document.addEventListener('touchmove', collectTouchEntropy, { passive: false });
+    document.addEventListener('touchstart', collectTouchEntropy, { passive: false });
     
-    // Cleanup function to remove event listener
+    // Cleanup function to remove event listeners
     return () => {
       document.removeEventListener('keydown', collectKeyboardEntropy);
+      document.removeEventListener('touchmove', collectTouchEntropy);
+      document.removeEventListener('touchstart', collectTouchEntropy);
     };
   }, [isCollecting]); // Re-run effect when isCollecting changes
 
@@ -160,7 +182,11 @@ function SeedGenerator() {
   }, []);
 
   return (
-    <div onMouseMove={collectMouseEntropy}>
+    <div 
+      onMouseMove={collectMouseEntropy}
+      onTouchMove={collectTouchEntropy}
+      onTouchStart={collectTouchEntropy}
+    >
       <div className="d-flex justify-content-between align-items-center mb-4" style={{ marginRight: '20%' }}>
         <h2 className="text-3xl font-bold">Secure Seed Generator</h2>
       </div>
@@ -207,7 +233,7 @@ function SeedGenerator() {
               <Card.Body>
                 {entropy.length < requiredEntropyPoints ? (
                   <>
-                    Move your mouse randomly within this box or type on your keyboard to generate entropy...
+                    Move your mouse or finger randomly within this box to generate entropy...
                     <div className="progress mt-2">
                       <div 
                         className="progress-bar progress-bar-striped progress-bar-animated" 
@@ -217,7 +243,7 @@ function SeedGenerator() {
                     <div className="text-muted small mt-2">
                       Progress: {entropy.length} / {requiredEntropyPoints} points
                       ({entropy.filter(e => e.type === 'keyboard').length} from keyboard,
-                      {entropy.filter(e => e.type === 'mouse').length} from mouse)
+                      {entropy.filter(e => e.type === 'pointer').length} from mouse/touch)
                     </div>
                   </>
                 ) : (
