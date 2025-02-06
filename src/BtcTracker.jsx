@@ -181,45 +181,83 @@ const BtcTracker = () => {
         const btcTx = await btcResponse.json();
         console.log('BTC Transaction:', btcTx);
         
-        // First get the x.libre account for this BTC address
-        const accountsResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: 'x.libre',
-            scope: 'x.libre',
-            table: 'accounts',
-            json: true,
-            limit: 1000
-          })
-        });
+        // Function to find matching account in a table
+        async function findMatchingAccount(code, btcAddress) {
+          let lower_bound = "";  // Start with empty string to get from beginning
+          const BATCH_SIZE = 1000;
+          let searchedCount = 0;
+          
+          while (true) {
+            console.log(`Searching ${code} accounts, batch starting from: ${lower_bound}, searched so far: ${searchedCount}`);
+            
+            const response = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                code: code,
+                scope: code,
+                table: 'accounts',
+                json: true,
+                limit: BATCH_SIZE,
+                lower_bound: lower_bound
+              })
+            });
 
-        const accountsData = await accountsResponse.json();
-        let matchingAccount = accountsData.rows.find(row => row.btc_address === btcTx.vout[0].scriptpubkey_address);
-        let isVaultTx = false;
+            if (!response.ok) {
+              throw new Error(`Failed to fetch ${code} accounts: ${response.statusText}`);
+            }
 
-        if (!matchingAccount) {
-          // Check v.libre if account not found in x.libre
-          const vaultAccountsResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              code: 'v.libre',
-              scope: 'v.libre',
-              table: 'accounts',
-              json: true,
-              limit: 1000
-            })
-          });
+            const data = await response.json();
+            searchedCount += data.rows.length;
+            
+            // Check if the BTC address matches any account in this batch
+            const account = data.rows.find(row => row.btc_address === btcAddress);
+            if (account) {
+              console.log(`Found matching account in ${code}: ${account.account}`);
+              return account;
+            }
 
-          const vaultAccountsData = await vaultAccountsResponse.json();
-          matchingAccount = vaultAccountsData.rows.find(row => row.btc_address === btcTx.vout[0].scriptpubkey_address);
-          if (matchingAccount) {
-            isVaultTx = true;
+            // If we've reached the end of the table or no more rows
+            if (!data.more || data.rows.length === 0) {
+              console.log(`Finished searching ${code}, total accounts checked: ${searchedCount}`);
+              break;
+            }
+
+            // Get the last account name for the next iteration
+            lower_bound = data.rows[data.rows.length - 1].account;
           }
+
+          return null;
         }
 
-        if (matchingAccount) {
+        // Check all vouts for matching addresses
+        let matchingAccount = null;
+        let matchingVout = null;
+        let isVaultTx = false;
+
+        // First try x.libre with vout[0]
+        try {
+          console.log('Searching x.libre accounts for address:', btcTx.vout[0].scriptpubkey_address);
+          const result = await findMatchingAccount('x.libre', btcTx.vout[0].scriptpubkey_address);
+          if (result) {
+            matchingAccount = result;
+            matchingVout = btcTx.vout[0];
+            isVaultTx = false;
+          } else {
+            // If not found in x.libre, try v.libre
+            console.log('Searching v.libre accounts for address:', btcTx.vout[0].scriptpubkey_address);
+            const vaultResult = await findMatchingAccount('v.libre', btcTx.vout[0].scriptpubkey_address);
+            if (vaultResult) {
+              matchingAccount = vaultResult;
+              matchingVout = btcTx.vout[0];
+              isVaultTx = true;
+            }
+          }
+        } catch (error) {
+          console.error('Error searching accounts:', error);
+        }
+
+        if (matchingAccount && matchingVout) {
           // Calculate date range (current tx time + 7 days)
           const txTimestamp = new Date(btcTx.status.block_time * 1000);
           const endDate = new Date(txTimestamp);
@@ -244,8 +282,8 @@ const BtcTracker = () => {
           console.log('Search End Time:', endDate.toISOString());
           console.log('Account Actions:', accountData);
 
-          // Convert satoshis to BTC
-          const btcAmount = (btcTx.vout[0].value / 100000000).toFixed(8);
+          // Convert satoshis to BTC for the matching vout
+          const btcAmount = (matchingVout.value / 100000000).toFixed(8);
 
           // Find all matching transfers by amount
           const matchingActions = accountData.actions?.filter(action => {
