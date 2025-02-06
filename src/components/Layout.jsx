@@ -3,7 +3,7 @@ import { Navbar, Container, Nav } from 'react-bootstrap';
 
 const Layout = ({ children }) => {
   return (
-    <>
+    <div className="d-flex flex-column min-vh-100">
       <Navbar bg="primary" variant="dark" expand="lg" className="mb-4">
         <Container fluid>
           <Navbar.Brand as={Link} to="/">
@@ -27,9 +27,27 @@ const Layout = ({ children }) => {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      {children}
-    </>
+      <div className="flex-grow-1">
+        {children}
+      </div>
+      <footer className="mt-auto py-3 bg-light">
+        <Container className="text-center">
+          <p className="mb-1">
+            <a href="https://github.com/bensig/libre-tools.com" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               className="text-decoration-none">
+              <i className="bi bi-github me-1"></i>
+              Open Source on GitHub
+            </a>
+          </p>
+          <p className="text-muted small mb-0">
+            Released under the MIT License
+          </p>
+        </Container>
+      </footer>
+    </div>
   );
 }
 
-export default Layout; 
+export default Layout;
