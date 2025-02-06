@@ -1010,11 +1010,36 @@ const LibreExplorer = () => {
   };
 
   const handleParamChange = (field, value) => {
-    setActionParams(prev => ({
-      ...prev,
+    const newParams = {
+      ...actionParams,
       [field]: value
-    }));
+    };
+    
+    setActionParams(newParams);
 
+    // Update URL with all non-empty parameters
+    const queryParams = new URLSearchParams();
+    Object.entries(newParams).forEach(([key, val]) => {
+      if (val) {
+        queryParams.set(key, val);
+      }
+    });
+
+    // Construct and navigate to new URL
+    let url = `/explorer/${network}`;
+    if (network === 'custom') {
+      url += `/${customEndpoint}`;
+    }
+    url += `/${accountName}/actions/${selectedAction}`;
+    
+    const queryString = queryParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+    
+    navigate(url);
+
+    // Validate the field if needed
     const fields = findStructForAction(selectedAction);
     const fieldDef = fields.find(f => f.name === field);
     const error = validateField(fieldDef.type, value);
@@ -1045,28 +1070,22 @@ const LibreExplorer = () => {
     return value;
   };
 
-  // Update handleLocalSubmit to use the formatter
+  // Update handleLocalSubmit to properly handle parameters
   const handleLocalSubmit = async () => {
     if (!walletSession) {
-      let params;
       try {
-        // If we have a single parameter that's a JSON string, parse it first
-        if (Object.entries(actionParams).length === 1) {
-          const value = Object.values(actionParams)[0];
-          // Parse the input and get just the array part if it's wrapped in a p property
-          const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-          params = parsed.p || parsed;  // Use the array directly, whether it's in p or not
-        } else {
-          params = actionParams;
-        }
+        // Create a clean object with all non-empty parameters
+        const cleanParams = Object.fromEntries(
+          Object.entries(actionParams)
+            .filter(([_, value]) => value !== '')
+        );
         
-        // Create command with the array directly, not wrapped in an object
-        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(params)}' -p ${accountName}@active`;
+        // Create command with the parameters
+        const cleosCommand = `cleos -u ${getApiEndpoint()} push action ${accountName} ${selectedAction} '${JSON.stringify(cleanParams)}' -p ${accountName}@active`;
         setActionCommand(cleosCommand);
         setShowActionCommand(true);
       } catch (e) {
-        console.warn('Failed to parse JSON parameter:', e);
-        params = actionParams;
+        console.warn('Failed to create cleos command:', e);
       }
       return;
     }
