@@ -5,6 +5,7 @@ import LibreExplorer from './LibreExplorer';
 import TransactionDownloader from './TransactionDownloader';
 import BtcTracker from './BtcTracker';
 import SeedGenerator from './SeedGenerator';
+import MultisigProposals from './MultisigProposals';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
                 <Route path="/transactions" element={<TransactionDownloader />} />
                 <Route path="/btc-tracker" element={<BtcTracker />} />
                 <Route path="/seed-generator" element={<SeedGenerator />} />
+                <Route path="/multisig" element={<MultisigProposals />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>

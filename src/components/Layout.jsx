@@ -23,6 +23,7 @@ const Layout = ({ children }) => {
               <Nav.Link as={Link} to="/transactions" className="fs-6">Transaction History</Nav.Link>
               <Nav.Link as={Link} to="/btc-tracker" className="fs-6">BTC Tracker</Nav.Link>
               <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed Generator</Nav.Link>
+              <Nav.Link as={Link} to="/multisig" className="fs-6">Multisig Proposals</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>
