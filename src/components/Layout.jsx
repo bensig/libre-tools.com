@@ -36,10 +36,12 @@ const Layout = ({ children }) => {
             <a href="https://github.com/bensig/libre-tools.com" 
                target="_blank" 
                rel="noopener noreferrer"
-               className="text-decoration-none">
-              <i className="bi bi-github me-1"></i>
-              Open Source on GitHub
-            </a>
+               className="text-primary"
+               style={{textDecoration: 'underline'}}
+             >
+               <i  className="bi bi-github me-1"></i>
+               View Source on Github
+             </a>
           </p>
           <p className="text-muted small mb-0">
             Released under the MIT License

@@ -62,6 +62,7 @@ const LibreExplorer = () => {
   const [selectedAction, setSelectedAction] = useState(null);
   const [actionParams, setActionParams] = useState({});
   const [paramErrors, setParamErrors] = useState({});
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const networks = {
     mainnet: {
@@ -114,7 +115,7 @@ const LibreExplorer = () => {
     window.handleExampleClick = (account) => {
       setError(null);  // Clear the error state
       setAccountName(account);
-      setTimeout(() => fetchTables(), 0);
+      fetchTables();  // Fetch tables immediately
     };
 
     // Cleanup
@@ -263,16 +264,14 @@ const LibreExplorer = () => {
         setScopes(scopeList);
 
         // If URL has a scope, use it; otherwise use the one with most rows
-        if (!scope) {
-          const scopeToUse = urlScope || 
-            (scopeList.length > 0 ? 
-              (scopeList.find(s => s.count > 0)?.scope || accountName) : 
-              accountName);
-          
-          console.log('Setting initial scope:', scopeToUse);
-          setScope(scopeToUse);
-          fetchTableRows('forward', scopeToUse, tableName);
-        }
+        const scopeToUse = urlScope || 
+          (scopeList.length > 0 ? 
+            (scopeList.find(s => s.count > 0)?.scope || accountName) : 
+            accountName);
+        
+        console.log('Setting initial scope:', scopeToUse);
+        setScope(scopeToUse);
+        fetchTableRows('forward', scopeToUse, tableName);
       } catch (error) {
         console.error('Error fetching scopes:', error);
         setError(error.message);
@@ -1473,6 +1472,16 @@ const LibreExplorer = () => {
     );
   };
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4" style={{ marginRight: '20%' }}>
@@ -1509,18 +1518,22 @@ const LibreExplorer = () => {
               <div className="mt-2">
                 Try one of these examples:{' '}
                 {EXAMPLE_ACCOUNTS.map((account, index) => (
-                  <span key={account}>
-                    <a 
-                      href="#" 
+                  <React.Fragment key={account}>
+                    <a
+                      href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        window.handleExampleClick(account);
+                        setError(null);  // Clear any existing errors
+                        setAccountName(account);
+                        fetchTables();  // Fetch tables immediately
                       }}
+                      className="text-primary"
+                      style={{ textDecoration: 'underline' }}
                     >
                       {account}
                     </a>
                     {index < EXAMPLE_ACCOUNTS.length - 1 ? ', ' : ''}
-                  </span>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -1810,6 +1823,9 @@ const LibreExplorer = () => {
                         actionCommand={actionCommand}
                         showActionCommand={showActionCommand}
                         getApiEndpoint={getApiEndpoint}
+                        copyToClipboard={copyToClipboard}
+                        copySuccess={copySuccess}
+                        setShowWalletModal={setShowWalletModal}
                     />
                     {/* Debug output */}
                     <pre style={{display: 'none'}}>
@@ -1897,7 +1913,10 @@ const ActionsView = ({
   setActionCommand,
   actionCommand,
   showActionCommand,
-  getApiEndpoint
+  getApiEndpoint,
+  copyToClipboard,
+  copySuccess,
+  setShowWalletModal
 }) => {
   // Initialize local state if needed
   const [localSelectedAction, setLocalSelectedAction] = useState(selectedAction);
@@ -1989,11 +2008,26 @@ const ActionsView = ({
       {!walletSession && showActionCommand && actionCommand && (
         <div className="mt-3">
           <div className="card">
-            <div className="card-header">
-              <h5 className="mb-0">CLEOS Command</h5>
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">CLI Command</h5>
+              <Button 
+                variant={copySuccess ? "success" : "primary"}
+                size="sm"
+                onClick={() => copyToClipboard(actionCommand)}
+              >
+                {copySuccess ? "Copied!" : "Copy"}
+              </Button>
             </div>
             <div className="card-body">
               <pre className="mb-0">{actionCommand}</pre>
+            </div>
+            <div className="card-footer text-muted">
+              <small>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowWalletModal(true); }} className="text-primary" style={{textDecoration: 'underline'}}>
+                  Connect wallet 
+                </a>
+                 &nbsp;to sign and broadcast using <a href="https://www.greymass.com/anchor" className="text-primary" style={{textDecoration: 'underline'}} target="_blank" rel="noopener noreferrer">Anchor (Desktop)</a> or <a href="https://bitcoinlibre.io/" className="text-primary" style={{textDecoration: 'underline'}} target="_blank" rel="noopener noreferrer">Bitcoin Libre (mobile)</a>
+              </small>
             </div>
           </div>
         </div>
