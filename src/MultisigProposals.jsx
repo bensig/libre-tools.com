@@ -245,6 +245,14 @@ const MultisigProposals = () => {
     return `https://msig.app/libre/${proposal.scope}/${proposal.proposal_name}/`;
   };
 
+  const getLatestTimestamp = (proposal) => {
+    const provided = proposal.provided_approvals || [];
+    if (provided.length === 0) return 0;
+    
+    // Get the latest timestamp from provided approvals
+    return Math.max(...provided.map(a => new Date(a.time).getTime()));
+  };
+
   return (
     <div className="container">
       <h2 className="mb-4">Multisig Proposals</h2>
@@ -274,7 +282,9 @@ const MultisigProposals = () => {
         </div>
       ) : (
         <div>
-          {proposals.map((proposal) => (
+          {proposals
+            .sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a))
+            .map((proposal) => (
             <Card key={`${proposal.scope}-${proposal.proposal_name}`} className="mb-4">
               <Card.Header className="d-flex justify-content-between align-items-center">
                 <div>
@@ -325,15 +335,22 @@ const MultisigProposals = () => {
                       })()}
                     </h6>
                     <div className="d-flex flex-wrap gap-2 mb-3">
-                      {proposal.requested_approvals.map((approval) => (
-                        <Badge 
-                          key={approval.level.actor}
-                          bg={isProducerInSchedule(approval.level.actor) ? 'primary' : 
-                             isProducerActive(approval.level.actor) ? 'info' : 'secondary'}
-                        >
-                          {approval.level.actor}
-                        </Badge>
-                      ))}
+                      {proposal.requested_approvals
+                        .sort((a, b) => {
+                          const aIsActive = isProducerInSchedule(a.level.actor);
+                          const bIsActive = isProducerInSchedule(b.level.actor);
+                          if (aIsActive && !bIsActive) return -1;
+                          if (!aIsActive && bIsActive) return 1;
+                          return a.level.actor.localeCompare(b.level.actor);
+                        })
+                        .map((approval) => (
+                          <Badge 
+                            key={approval.level.actor}
+                            bg={isProducerInSchedule(approval.level.actor) ? 'primary' : 'secondary'}
+                          >
+                            {approval.level.actor}
+                          </Badge>
+                        ))}
                     </div>
                   </div>
                   <div className="col-md-6">
@@ -349,15 +366,23 @@ const MultisigProposals = () => {
                       })()}
                     </h6>
                     <div className="d-flex flex-wrap gap-2">
-                      {proposal.provided_approvals.map((approval) => (
-                        <Badge 
-                          key={approval.level.actor}
-                          bg={isProducerInSchedule(approval.level.actor) ? 'success' : 
-                             isProducerActive(approval.level.actor) ? 'info' : 'secondary'}
-                        >
-                          {approval.level.actor} ({formatDate(approval.time)})
-                        </Badge>
-                      ))}
+                      {proposal.provided_approvals
+                        .sort((a, b) => {
+                          const aIsActive = isProducerInSchedule(a.level.actor);
+                          const bIsActive = isProducerInSchedule(b.level.actor);
+                          if (aIsActive && !bIsActive) return -1;
+                          if (!aIsActive && bIsActive) return 1;
+                          return new Date(b.time).getTime() - new Date(a.time).getTime();
+                        })
+                        .map((approval) => (
+                          <Badge 
+                            key={approval.level.actor}
+                            bg={isProducerInSchedule(approval.level.actor) ? 'success' : 'secondary'}
+                            title={new Date(approval.time).toLocaleString()}
+                          >
+                            {approval.level.actor} ({new Date(approval.time).toLocaleString()})
+                          </Badge>
+                        ))}
                     </div>
                   </div>
                 </div>
