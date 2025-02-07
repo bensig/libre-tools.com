@@ -1552,7 +1552,7 @@ const LibreExplorer = () => {
             </Form.Group>
 
             <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
-              <Form.Label>Smart Contract Account Name</Form.Label>
+              <Form.Label>Account Name</Form.Label>
               <div>
                 <div className="d-flex gap-2">
                   <Form.Control
