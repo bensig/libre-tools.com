@@ -356,7 +356,7 @@ const BtcTracker = () => {
             </div>
           </div>
 
-          <Form className="mb-4">
+          <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3" style={{ maxWidth: '300px' }}>
               <NetworkSelector
                 network={network}
@@ -393,6 +393,11 @@ const BtcTracker = () => {
                   {isLoading ? <Spinner size="sm" /> : 'Track'}
                 </Button>
               </div>
+              <Form.Text className="text-muted">
+                Example Peg-in: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed')}>1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed</span>
+                <br />
+                Example Peg-out: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc')}>8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc</span>
+              </Form.Text>
               {hash && !isValidHash(hash) && (
                 <Form.Text className="text-danger">
                   Transaction hash must be 64 hexadecimal characters
