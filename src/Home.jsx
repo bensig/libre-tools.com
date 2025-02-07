@@ -22,6 +22,11 @@ const Home = () => {
       title: 'Seed Generator',
       path: '/seed-generator',
       description: 'Generate a 128-bit or 256-bit seed phrase by moving your mouse to create entropy.'
+    },
+    {
+      title: 'Multisig Proposals',
+      path: '/multisig',
+      description: 'Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations.'
     }
   ];
 
