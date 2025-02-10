@@ -1818,6 +1818,22 @@ const LibreExplorer = () => {
                         ) : null}
                     </div>
 
+                    {/* Move the cURL button and command to a better position */}
+                    <div className="mt-3 mb-3">
+                      {selectedTable && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => setShowCurlCommand(!showCurlCommand)}
+                        >
+                          {showCurlCommand ? 'Hide cURL' : 'Show cURL'}
+                        </Button>
+                      )}
+                      {showCurlCommand && selectedTable && (
+                        <CurlCommand command={generateCurlCommand()} />
+                      )}
+                    </div>
+
                     {/* Warning message for tables view */}
                     {warningMessage && (
                         <div className="alert alert-warning mt-4">
@@ -1849,21 +1865,6 @@ const LibreExplorer = () => {
                             </Button>
                         </Modal.Footer>
                     </Modal>
-
-                    {/* Show cURL command */}
-                    {selectedTable && (
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        className="ms-2"
-                        onClick={() => setShowCurlCommand(!showCurlCommand)}
-                      >
-                        {showCurlCommand ? 'Hide cURL' : 'Show cURL'}
-                      </Button>
-                    )}
-                    {showCurlCommand && selectedTable && (
-                      <CurlCommand command={generateCurlCommand()} />
-                    )}
                 </>
             ) : (
                 <>
