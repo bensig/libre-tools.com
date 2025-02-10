@@ -63,6 +63,7 @@ const LibreExplorer = () => {
   const [actionParams, setActionParams] = useState({});
   const [paramErrors, setParamErrors] = useState({});
   const [copySuccess, setCopySuccess] = useState(false);
+  const [showCurlCommand, setShowCurlCommand] = useState(false);
 
   const networks = {
     mainnet: {
@@ -1482,6 +1483,55 @@ const LibreExplorer = () => {
     }
   };
 
+  const generateCurlCommand = () => {
+    const params = {
+      code: accountName,
+      table: selectedTable,
+      scope: scope,
+      limit: limit,
+      json: true
+    };
+
+    if (searchKey && searchField) {
+      params.lower_bound = searchKey;
+      params.upper_bound = searchKey;
+    }
+
+    return `curl -X POST ${getApiEndpoint()}/v1/chain/get_table_rows -d '${JSON.stringify(params, null, 2)}'`;
+  };
+
+  const CurlCommand = ({ command }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy command:', err);
+      }
+    };
+
+    return (
+      <div className="mt-3 p-3 bg-light border rounded">
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <span className="text-muted">cURL Command</span>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={handleCopy}
+          >
+            {copied ? 'Copied!' : 'Copy'}
+          </Button>
+        </div>
+        <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          {command}
+        </pre>
+      </div>
+    );
+  };
+
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4" style={{ marginRight: '20%' }}>
@@ -1799,6 +1849,21 @@ const LibreExplorer = () => {
                             </Button>
                         </Modal.Footer>
                     </Modal>
+
+                    {/* Show cURL command */}
+                    {selectedTable && (
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        className="ms-2"
+                        onClick={() => setShowCurlCommand(!showCurlCommand)}
+                      >
+                        {showCurlCommand ? 'Hide cURL' : 'Show cURL'}
+                      </Button>
+                    )}
+                    {showCurlCommand && selectedTable && (
+                      <CurlCommand command={generateCurlCommand()} />
+                    )}
                 </>
             ) : (
                 <>
