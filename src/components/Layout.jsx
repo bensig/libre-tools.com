@@ -8,7 +8,7 @@ const Layout = ({ children }) => {
         <Container fluid>
           <Navbar.Brand as={Link} to="/">
             <img
-              src="/Libre Favicon White.png"
+              src="/LibreLogoWhite.png"
               height="30"
               className="d-inline-block align-top me-2"
               alt="Libre logo"
