@@ -71,7 +71,7 @@ const LibreExplorer = () => {
       rpcEndpoint: 'https://lb.libre.org',
     },
     testnet: {
-      chainId: '73e2c46a3cb531e3e981e5ac2e4c0dcd4a286cb649aeaf8c087f370eb44e7e2c',
+      chainId: 'b64646740308df2ee06c6b72f34c0f7fa066d940e831f752db2006fcc2b78dee',
       rpcEndpoint: 'https://testnet.libre.org',
     }
   };
