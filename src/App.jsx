@@ -6,6 +6,7 @@ import TransactionDownloader from './TransactionDownloader';
 import BtcTracker from './BtcTracker';
 import SeedGenerator from './SeedGenerator';
 import MultisigProposals from './MultisigProposals';
+import LoanTracker from './LoanTracker';
 
 function App() {
   return (
@@ -26,6 +27,10 @@ function App() {
                 <Route path="/btc-tracker" element={<BtcTracker />} />
                 <Route path="/seed-generator" element={<SeedGenerator />} />
                 <Route path="/multisig" element={<MultisigProposals />} />
+                <Route path="/loans" element={<LoanTracker />} />
+                <Route path="/loans/:network" element={<LoanTracker />} />
+                <Route path="/loans/:network/liquidations" element={<LoanTracker />} />
+                <Route path="/loans/:network/:view" element={<LoanTracker />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
