@@ -27,6 +27,9 @@ const LoanTracker = () => {
     available: '0 USDT',
     utilized: '0 USDT'
   });
+  const [vaultAccounts, setVaultAccounts] = useState({});
+  const [vaultBalances, setVaultBalances] = useState({});
+  const [btcPrice, setBtcPrice] = useState(0);
 
   const getApiEndpoint = () => {
     if (customEndpoint && (network === 'custom-libre-btc-mainnet' || network === 'custom-libre-btc-signet')) {
@@ -184,17 +187,204 @@ const LoanTracker = () => {
     }
   };
 
+  const fetchVaultAccounts = async () => {
+    try {
+      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: 'loan',
+          table: 'vault',
+          scope: 'loan',
+          limit: 100,
+          json: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch vault data');
+      }
+
+      const data = await response.json();
+      const vaults = {};
+      data.rows.forEach(row => {
+        vaults[row.owner] = row.vault;
+      });
+      return vaults;
+    } catch (error) {
+      console.error('Error fetching vault accounts:', error);
+      setError('Failed to fetch vault data. ' + error.message);
+      return {};
+    }
+  };
+
+  const fetchVaultBalance = async (vaultAccount) => {
+    try {
+      // Fetch both CBTC and BTC balances in parallel
+      const [cbtcResponse, btcResponse] = await Promise.all([
+        fetch(getApiEndpoint() + '/v1/chain/get_currency_balance', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            code: 'cbtc.libre',
+            account: vaultAccount,
+            symbol: 'CBTC'
+          })
+        }),
+        fetch(getApiEndpoint() + '/v1/chain/get_currency_balance', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            code: 'btc.libre',
+            account: vaultAccount,
+            symbol: 'BTC'
+          })
+        })
+      ]);
+
+      if (!cbtcResponse.ok || !btcResponse.ok) {
+        throw new Error('Failed to fetch vault balances');
+      }
+
+      const [cbtcBalances, btcBalances] = await Promise.all([
+        cbtcResponse.json(),
+        btcResponse.json()
+      ]);
+
+      // Extract amounts and sum them
+      const cbtcAmount = parseFloat(cbtcBalances[0]?.split(' ')[0] || '0');
+      const btcAmount = parseFloat(btcBalances[0]?.split(' ')[0] || '0');
+      const totalBtc = cbtcAmount + btcAmount;
+
+      return {
+        cbtc: cbtcBalances[0] || '0.00000000 CBTC',
+        btc: btcBalances[0] || '0.00000000 BTC',
+        total: totalBtc.toFixed(8)
+      };
+    } catch (error) {
+      console.error('Error fetching vault balances:', error);
+      return {
+        cbtc: '0.00000000 CBTC',
+        btc: '0.00000000 BTC',
+        total: '0.00000000'
+      };
+    }
+  };
+
+  const fetchBTCPrice = async () => {
+    try {
+      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: network === 'mainnet' ? 'chainlink' : 'oracletest',
+          table: 'feed',
+          scope: network === 'mainnet' ? 'chainlink' : 'oracletest',
+          limit: 100,
+          json: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch BTC price');
+      }
+
+      const data = await response.json();
+      console.log('BTC price data:', data);
+      if (data.rows && data.rows.length > 0) {
+        // Get the first row that matches btcusd pair
+        const btcFeed = data.rows.find(row => row.pair === 'btcusd');
+        if (btcFeed) {
+          const price = parseFloat(btcFeed.price);
+          console.log('Calculated BTC price:', price);
+          return price;
+        }
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error fetching BTC price:', error);
+      return 0;
+    }
+  };
+
+  const calculateLoanLTV = (loan) => {
+    const collateralValue = calculateCollateralValue(loan);
+    const loanValue = parseFloat(loan.outstanding_amount.split(' ')[0]);
+    return collateralValue > 0 ? (loanValue / collateralValue * 100) : 0;
+  };
+
+  const getCollateralBTC = (loan) => {
+    if (!vaultAccounts[loan.account]) return { cbtc: '0', btc: '0', total: '0' };
+    const balance = vaultBalances[vaultAccounts[loan.account]] || { 
+      cbtc: '0.00000000 CBTC', 
+      btc: '0.00000000 BTC', 
+      total: '0.00000000' 
+    };
+    return {
+      cbtc: balance.cbtc.split(' ')[0],
+      btc: balance.btc.split(' ')[0],
+      total: balance.total
+    };
+  };
+
+  const calculateCollateralValue = (loan) => {
+    const balance = getCollateralBTC(loan);
+    const totalBTC = parseFloat(balance.total);
+    const value = totalBTC * btcPrice;
+    console.log(`Calculating value for ${totalBTC} BTC at price $${btcPrice}: $${value}`);
+    return value;
+  };
+
+  const calculateTotalCollateralValue = (loans) => {
+    console.log('Calculating total collateral for loans:', loans);
+    const total = loans.reduce((sum, loan) => {
+      const value = calculateCollateralValue(loan);
+      console.log('Loan', loan.id, 'collateral value:', value);
+      return sum + value;
+    }, 0);
+    console.log('Total collateral value:', total);
+    return total;
+  };
+
+  const calculateCollateralizationRatio = (loans) => {
+    const totalCollateralValue = calculateTotalCollateralValue(loans);
+    const totalLoanValue = loans.reduce((sum, loan) => {
+      const amount = parseFloat(loan.outstanding_amount.split(' ')[0]);
+      return sum + amount;
+    }, 0);
+    
+    return totalLoanValue > 0 ? (totalCollateralValue / totalLoanValue * 100) : 0;
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        const [active, completed, activeLiq, completedLiq] = await Promise.all([
+        // Fetch all data in parallel
+        const [
+          active, 
+          completed, 
+          activeLiq, 
+          completedLiq,
+          vaults,
+          btcPriceData
+        ] = await Promise.all([
           fetchLoans('loan'),
           fetchLoans('completed'),
           fetchLiquidations('liquidating'),
-          fetchLiquidations('finished')
+          fetchLiquidations('finished'),
+          fetchVaultAccounts(),
+          fetchBTCPrice()
         ]);
         
         // Filter active loans by status
@@ -205,6 +395,18 @@ const LoanTracker = () => {
         setCompletedLoans(completedLoans);
         setActiveLiquidations(activeLiq);
         setCompletedLiquidations(completedLiq);
+        setVaultAccounts(vaults);
+        setBtcPrice(btcPriceData);
+
+        // Fetch balances for all vault accounts
+        const balances = {};
+        await Promise.all(
+          Object.values(vaults).map(async (vault) => {
+            balances[vault] = await fetchVaultBalance(vault);
+          })
+        );
+        setVaultBalances(balances);
+
         await fetchPoolStats();
       } catch (error) {
         console.error('Error loading data:', error);
@@ -216,13 +418,6 @@ const LoanTracker = () => {
 
     loadData();
   }, [network, customEndpoint]);
-
-  const calculateTotalAmount = (loans) => {
-    return formatUSDT(loans.reduce((sum, loan) => {
-      const amount = parseFloat(loan.outstanding_amount.split(' ')[0]);
-      return sum + amount;
-    }, 0));
-  };
 
   const handleViewChange = (newView) => {
     setView(newView);
@@ -288,6 +483,13 @@ const LoanTracker = () => {
     </Table>
   );
 
+  const calculateTotalAmount = (loans) => {
+    return formatUSDT(loans.reduce((sum, loan) => {
+      const amount = parseFloat(loan.outstanding_amount.split(' ')[0]);
+      return sum + amount;
+    }, 0));
+  };
+
   return (
     <div className="container">
       <div className="row mb-4">
@@ -327,7 +529,7 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Total Pool Balance</h5>
+                  <h5 className="card-title">Total USDT</h5>
                   <p className="card-text h3">{poolStats.total}</p>
                 </div>
               </div>
@@ -335,7 +537,7 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Available Balance</h5>
+                  <h5 className="card-title">Available USDT</h5>
                   <p className="card-text h3">{poolStats.available}</p>
                 </div>
               </div>
@@ -343,13 +545,41 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Utilized Balance</h5>
+                  <h5 className="card-title">Utilized USDT</h5>
                   <p className="card-text h3">{poolStats.utilized}</p>
                 </div>
               </div>
             </div>
           </div>
 
+          {view === 'active' && (
+            <div className="row mb-4">
+              <div className="col-md-4">
+                <div className="card">
+                  <div className="card-body">
+                    <h5 className="card-title">Total Active Loan Amount</h5>
+                    <p className="card-text h3">{calculateTotalAmount(activeLoans)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="card">
+                  <div className="card-body">
+                    <h5 className="card-title">Total BTC Collateral Value</h5>
+                    <p className="card-text h3">${calculateTotalCollateralValue(activeLoans).toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="card">
+                  <div className="card-body">
+                    <h5 className="card-title">Collateralization Ratio</h5>
+                    <p className="card-text h3">{calculateCollateralizationRatio(activeLoans).toFixed(2)}%</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="card">
             <div className="card-header d-flex justify-content-between align-items-center">
               <h5 className="mb-0">
@@ -391,10 +621,6 @@ const LoanTracker = () => {
                 </>
               ) : (
                 <>
-                  <div className="mb-4">
-                    <h6>Total {view === 'completed' ? 'Completed' : 'Active'} Loan Amount</h6>
-                    <p className="h3">{calculateTotalAmount(view === 'completed' ? completedLoans : activeLoans)}</p>
-                  </div>
                   <Table striped bordered hover responsive>
                     <thead>
                       <tr>
@@ -403,24 +629,52 @@ const LoanTracker = () => {
                         <th>Initial Amount</th>
                         <th>Outstanding Amount</th>
                         <th>APR</th>
+                        {view === 'active' && (
+                          <>
+                            <th>Collateral (BTC)</th>
+                            <th>Collateral Value</th>
+                            <th>LTV</th>
+                          </>
+                        )}
                         <th>Start Time</th>
                         <th>End Time</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(view === 'completed' ? completedLoans : activeLoans).map(loan => (
-                        <tr key={loan.id}>
-                          <td>{loan.id}</td>
-                          <td>{loan.account}</td>
-                          <td>{formatUSDT(loan.initial_amount)}</td>
-                          <td>{formatUSDT(loan.outstanding_amount)}</td>
-                          <td>{(loan.terms?.apr / 100).toFixed(2)}%</td>
-                          <td>{new Date(loan.start_time).toLocaleString()}</td>
-                          <td>{new Date(loan.end_time).toLocaleString()}</td>
-                          <td>{renderStatus(loan.status)}</td>
-                        </tr>
-                      ))}
+                      {(view === 'completed' ? completedLoans : activeLoans).map(loan => {
+                        const collateral = getCollateralBTC(loan);
+                        const collateralValue = calculateCollateralValue(loan);
+                        const ltv = calculateLoanLTV(loan);
+                        
+                        return (
+                          <tr key={loan.id}>
+                            <td>{loan.id}</td>
+                            <td>{loan.account}</td>
+                            <td>{formatUSDT(loan.initial_amount)}</td>
+                            <td>{formatUSDT(loan.outstanding_amount)}</td>
+                            <td>{(loan.terms?.apr / 100).toFixed(2)}%</td>
+                            {view === 'active' && (
+                              <>
+                                <td>
+                                  {parseFloat(collateral.total).toFixed(8)}
+                                  <small className="d-block text-muted">
+                                    CBTC: {parseFloat(collateral.cbtc).toFixed(8)}
+                                    {parseFloat(collateral.btc) > 0 && (
+                                      <>, BTC: {parseFloat(collateral.btc).toFixed(8)}</>
+                                    )}
+                                  </small>
+                                </td>
+                                <td>${collateralValue.toFixed(2)}</td>
+                                <td>{ltv.toFixed(2)}%</td>
+                              </>
+                            )}
+                            <td>{new Date(loan.start_time).toLocaleString()}</td>
+                            <td>{new Date(loan.end_time).toLocaleString()}</td>
+                            <td>{renderStatus(loan.status)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 </>
