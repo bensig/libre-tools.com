@@ -6,9 +6,10 @@ function SeedGenerator() {
   const [entropy, setEntropy] = useState([]);
   const [seedPhrase, setSeedPhrase] = useState('');
   const [isCollecting, setIsCollecting] = useState(false);
-  const [entropyBits, setEntropyBits] = useState(256);
+  const [entropyBits, setEntropyBits] = useState(128);
   const [showSeed, setShowSeed] = useState(false);
   const [error, setError] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
   const timeoutRef = useRef(null);
   
   // Calculate required entropy points based on entropy bits
@@ -159,6 +160,20 @@ function SeedGenerator() {
     setError('');
   };
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(seedPhrase)
+      .then(() => {
+        setCopySuccess(true);
+        timeoutRef.current = setTimeout(() => {
+          setCopySuccess(false);
+        }, 2000);
+      })
+      .catch(err => {
+        console.error('Failed to copy: ', err);
+        setError('Failed to copy to clipboard');
+      });
+  };
+
   useEffect(() => {
     // Add keyboard and touch event listeners when collecting
     document.addEventListener('keydown', collectKeyboardEntropy);
@@ -266,8 +281,24 @@ function SeedGenerator() {
               <Alert variant="warning">
                 <strong>Important:</strong> Save this seed phrase securely. Anyone with access to it will have access to your funds!
               </Alert>
-              <div className="p-3 bg-light border rounded">
+              <div className="p-3 bg-light border rounded d-flex justify-content-between align-items-start">
                 <code className="user-select-all">{seedPhrase}</code>
+                <Button 
+                  variant={copySuccess ? "success" : "outline-secondary"}
+                  size="sm"
+                  className="ms-2"
+                  onClick={handleCopy}
+                >
+                  {copySuccess ? (
+                    <>
+                      <i className="bi bi-check"></i> Copied
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-clipboard"></i> Copy
+                    </>
+                  )}
+                </Button>
               </div>
               <Button 
                 variant="primary" 
