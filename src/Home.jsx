@@ -29,7 +29,7 @@ const Home = () => {
       description: 'Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations.'
     },
     {
-      title: 'Loan Tracker',
+      title: 'Global Loan Stats',
       path: '/loans',
       description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.'
     }

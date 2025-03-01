@@ -519,7 +519,7 @@ const LoanTracker = () => {
     <div className="container">
       <div className="row mb-4">
         <div className="col">
-          <h2>Loan Tracker</h2>
+          <h2>Global Loan Stats</h2>
         </div>
       </div>
 
