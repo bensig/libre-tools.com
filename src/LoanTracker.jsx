@@ -554,7 +554,7 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Total Pool</h5>
+                  <h5 className="card-title">Tether Pool Size</h5>
                   <p className="card-text h3">{formatUSDT(poolStats.total)}</p>
                 </div>
               </div>
@@ -562,7 +562,7 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Avail Pool</h5>
+                  <h5 className="card-title">Available</h5>
                   <p className="card-text h3">{formatUSDT(poolStats.available)}</p>
                 </div>
               </div>
@@ -570,7 +570,7 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Utilized Pool</h5>
+                  <h5 className="card-title">Utilized</h5>
                   <p className="card-text h3">
                     {formatNumber(calculateUtilizationPercentage().toFixed(2))}%
                   </p>
@@ -584,7 +584,7 @@ const LoanTracker = () => {
               <div className="col-md-4">
                 <div className="card">
                   <div className="card-body">
-                    <h5 className="card-title">Total Active Loan Amount</h5>
+                    <h5 className="card-title">Outstanding Loans</h5>
                     <p className="card-text h3">{calculateTotalAmount(activeLoans)}</p>
                   </div>
                 </div>
@@ -592,7 +592,7 @@ const LoanTracker = () => {
               <div className="col-md-4">
                 <div className="card">
                   <div className="card-body">
-                    <h5 className="card-title">Total BTC Collateral Value</h5>
+                    <h5 className="card-title">BTC Collateral Value</h5>
                     <p className="card-text h3">${formatNumber(calculateTotalCollateralValue(activeLoans).toFixed(2))}</p>
                   </div>
                 </div>
@@ -661,10 +661,10 @@ const LoanTracker = () => {
                             <th>Collateral (BTC)</th>
                             <th>Collateral Value</th>
                             <th>LTV</th>
+                            <th>Days Remaining</th>
                           </>
                         )}
-                        <th>Start Time</th>
-                        <th>End Time</th>
+                        {view === 'completed' && <th>Completion Date</th>}
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -673,6 +673,16 @@ const LoanTracker = () => {
                         const collateral = getCollateralBTC(loan);
                         const collateralValue = calculateCollateralValue(loan);
                         const ltv = calculateLoanLTV(loan);
+                        
+                        // Calculate days remaining
+                        const startTime = new Date(loan.start_time);
+                        const currentDate = new Date();
+                        
+                        // Calculate days elapsed since start
+                        const daysElapsed = Math.floor((currentDate - startTime) / (1000 * 60 * 60 * 24));
+                        
+                        // Calculate days remaining (30 days total - days elapsed)
+                        const daysRemaining = Math.max(0, 30 - daysElapsed);
                         
                         return (
                           <tr key={loan.id}>
@@ -685,19 +695,15 @@ const LoanTracker = () => {
                               <>
                                 <td>
                                   {parseFloat(collateral.total).toFixed(8)}
-                                  <small className="d-block text-muted">
-                                    CBTC: {parseFloat(collateral.cbtc).toFixed(8)}
-                                    {parseFloat(collateral.btc) > 0 && (
-                                      <>, BTC: {parseFloat(collateral.btc).toFixed(8)}</>
-                                    )}
-                                  </small>
                                 </td>
                                 <td>${formatNumber(collateralValue.toFixed(2))}</td>
                                 <td>{formatNumber(ltv.toFixed(2))}%</td>
+                                <td>{daysRemaining} days</td>
                               </>
                             )}
-                            <td>{new Date(loan.start_time).toLocaleString()}</td>
-                            <td>{new Date(loan.end_time).toLocaleString()}</td>
+                            {view === 'completed' && (
+                              <td>{new Date(loan.end_time).toLocaleString()}</td>
+                            )}
                             <td>{renderStatus(loan.status)}</td>
                           </tr>
                         );
