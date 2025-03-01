@@ -23,9 +23,9 @@ const LoanTracker = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [poolStats, setPoolStats] = useState({
-    total: '0 USDT',
-    available: '0 USDT',
-    utilized: '0 USDT'
+    total: 0,
+    available: 0,
+    utilized: 0
   });
   const [vaultAccounts, setVaultAccounts] = useState({});
   const [vaultBalances, setVaultBalances] = useState({});
@@ -36,6 +36,24 @@ const LoanTracker = () => {
       return customEndpoint;
     }
     return NETWORK_ENDPOINTS[network] || NETWORK_ENDPOINTS.mainnet;
+  };
+
+  // Format number with commas
+  const formatNumber = (value) => {
+    return new Intl.NumberFormat('en-US').format(value);
+  };
+
+  // Format USDT with 2 decimal places and commas
+  const formatUSDT = (value) => {
+    let amount;
+    if (typeof value === 'string') {
+      [amount] = value.split(' ');
+      amount = parseFloat(amount);
+    } else {
+      amount = parseFloat(value);
+    }
+    // Ensure exactly 2 decimal places
+    return formatNumber(amount.toFixed(2)) + ' USDT';
   };
 
   useEffect(() => {
@@ -60,41 +78,12 @@ const LoanTracker = () => {
     setNetwork(newNetwork);
   };
 
-  const formatUSDT = (value) => {
-    if (typeof value === 'string') {
-      const [amount] = value.split(' ');
-      return parseFloat(amount).toFixed(2) + ' USDT';
-    }
-    return parseFloat(value).toFixed(2) + ' USDT';
-  };
-
   const fetchPoolStats = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Get total deposits
-      const depositResponse = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'deposit',
-          scope: 'loan',
-          limit: 100,
-          json: true
-        })
-      });
-
-      if (!depositResponse.ok) {
-        throw new Error('Failed to fetch deposit data');
-      }
-
-      const depositData = await depositResponse.json();
-
-      // Get available balance
+      // Get available balance directly from currency balance
       const balanceResponse = await fetch(getApiEndpoint() + '/v1/chain/get_currency_balance', {
         method: 'POST',
         headers: {
@@ -112,12 +101,43 @@ const LoanTracker = () => {
       }
 
       const balanceData = await balanceResponse.json();
+      const availableAmount = parseFloat(balanceData[0]?.split(' ')[0] || 0);
 
-      const available = formatUSDT(balanceData[0] || '0 USDT');
-      const total = formatUSDT(depositData.rows.reduce((sum, row) => sum + parseFloat(row.amount), 0));
-      const utilized = formatUSDT(parseFloat(total) - parseFloat(available));
+      // Get global stats for outstanding amount (utilized)
+      const globalStatsResponse = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: 'loan',
+          table: 'globalstats',
+          scope: 'loan',
+          limit: 1,
+          json: true
+        })
+      });
 
-      setPoolStats({ total, available, utilized });
+      if (!globalStatsResponse.ok) {
+        throw new Error('Failed to fetch global stats');
+      }
+
+      const globalStatsData = await globalStatsResponse.json();
+      
+      // Get utilized amount from outstanding_amount in globalstats
+      const utilizedAmount = parseFloat(
+        globalStatsData.rows[0]?.outstanding_amount?.split(' ')[0] || 0
+      );
+      
+      // Calculate total as available + utilized
+      const totalAmount = availableAmount + utilizedAmount;
+      
+      // Store values in state
+      setPoolStats({
+        total: totalAmount,
+        available: availableAmount,
+        utilized: utilizedAmount
+      });
     } catch (error) {
       console.error('Error fetching pool stats:', error);
       setError('Failed to fetch pool statistics. ' + error.message);
@@ -339,7 +359,7 @@ const LoanTracker = () => {
     const balance = getCollateralBTC(loan);
     const totalBTC = parseFloat(balance.total);
     const value = totalBTC * btcPrice;
-    console.log(`Calculating value for ${totalBTC} BTC at price $${btcPrice}: $${value}`);
+    console.log(`Calculating value for ${totalBTC} BTC at price $${formatNumber(btcPrice)}: $${formatNumber(value)}`);
     return value;
   };
 
@@ -362,6 +382,11 @@ const LoanTracker = () => {
     }, 0);
     
     return totalLoanValue > 0 ? (totalCollateralValue / totalLoanValue * 100) : 0;
+  };
+
+  const calculateUtilizationPercentage = () => {
+    if (poolStats.total <= 0) return 0;
+    return (poolStats.utilized / poolStats.total) * 100;
   };
 
   useEffect(() => {
@@ -473,7 +498,7 @@ const LoanTracker = () => {
             <td>{liq.loan_id}</td>
             <td>{formatUSDT(liq.outstanding_amount)}</td>
             <td>{liq.collateral_amount}</td>
-            <td>${(parseFloat(liq.collateral_usd_price) / 100000000).toFixed(2)}</td>
+            <td>${formatNumber((parseFloat(liq.collateral_usd_price) / 100000000).toFixed(2))}</td>
             <td>{new Date(liq.review_start_time).toLocaleString()}</td>
             <td>{new Date(liq.last_check_time).toLocaleString()}</td>
             <td>{renderLiquidationStatus(liq.status)}</td>
@@ -529,24 +554,26 @@ const LoanTracker = () => {
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Total USDT</h5>
-                  <p className="card-text h3">{poolStats.total}</p>
+                  <h5 className="card-title">Total Pool</h5>
+                  <p className="card-text h3">{formatUSDT(poolStats.total)}</p>
                 </div>
               </div>
             </div>
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Available USDT</h5>
-                  <p className="card-text h3">{poolStats.available}</p>
+                  <h5 className="card-title">Avail Pool</h5>
+                  <p className="card-text h3">{formatUSDT(poolStats.available)}</p>
                 </div>
               </div>
             </div>
             <div className="col-md-4">
               <div className="card">
                 <div className="card-body">
-                  <h5 className="card-title">Utilized USDT</h5>
-                  <p className="card-text h3">{poolStats.utilized}</p>
+                  <h5 className="card-title">Utilized Pool</h5>
+                  <p className="card-text h3">
+                    {formatNumber(calculateUtilizationPercentage().toFixed(2))}%
+                  </p>
                 </div>
               </div>
             </div>
@@ -566,7 +593,7 @@ const LoanTracker = () => {
                 <div className="card">
                   <div className="card-body">
                     <h5 className="card-title">Total BTC Collateral Value</h5>
-                    <p className="card-text h3">${calculateTotalCollateralValue(activeLoans).toFixed(2)}</p>
+                    <p className="card-text h3">${formatNumber(calculateTotalCollateralValue(activeLoans).toFixed(2))}</p>
                   </div>
                 </div>
               </div>
@@ -574,7 +601,7 @@ const LoanTracker = () => {
                 <div className="card">
                   <div className="card-body">
                     <h5 className="card-title">Collateralization Ratio</h5>
-                    <p className="card-text h3">{calculateCollateralizationRatio(activeLoans).toFixed(2)}%</p>
+                    <p className="card-text h3">{formatNumber(calculateCollateralizationRatio(activeLoans).toFixed(2))}%</p>
                   </div>
                 </div>
               </div>
@@ -665,8 +692,8 @@ const LoanTracker = () => {
                                     )}
                                   </small>
                                 </td>
-                                <td>${collateralValue.toFixed(2)}</td>
-                                <td>{ltv.toFixed(2)}%</td>
+                                <td>${formatNumber(collateralValue.toFixed(2))}</td>
+                                <td>{formatNumber(ltv.toFixed(2))}%</td>
                               </>
                             )}
                             <td>{new Date(loan.start_time).toLocaleString()}</td>
