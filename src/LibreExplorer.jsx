@@ -1205,11 +1205,9 @@ const LibreExplorer = () => {
       url += `/${network}`;
       if (accountName) {
         if (network === 'custom') {
-          url += `/${customEndpoint}/${accountName}`;
-        } else {
-          url += `/${accountName}`;
+          url += `/${customEndpoint}`;
         }
-        url += `/${newView}`; // Add the new view to URL
+        url += `/${accountName}`;
       }
     }
     
@@ -1285,33 +1283,6 @@ const LibreExplorer = () => {
           url += `/${customEndpoint}/${accountName}`;
         } else {
           url += `/${accountName}`;
-        }
-        
-        if (view) {
-          url += `/${view}`;
-          
-          if (view === 'tables' && selectedTable && scope) {
-            // Handle tables view URL
-            url += `/${selectedTable}/${scope}`;
-          } else if (view === 'actions' && selectedAction) {
-            // Handle actions view URL
-            url += `/${selectedAction}`;
-            
-            // Add action parameters to URL if they exist
-            if (Object.keys(actionParams).length > 0) {
-              url += '/data';
-              const params = new URLSearchParams();
-              Object.entries(actionParams).forEach(([key, value]) => {
-                if (value !== '') {
-                  params.append(key, value);
-                }
-              });
-              const paramString = params.toString();
-              if (paramString) {
-                url += `?${paramString}`;
-              }
-            }
-          }
         }
       }
     }
@@ -2036,7 +2007,7 @@ const ActionsView = ({
 
       {localSelectedAction && (
         <div className="card">
-          <div className="card-header">
+          <div className="card-header bg-primary text-white">
             <h5 className="mb-0">{localSelectedAction}</h5>
           </div>
           <div className="card-body">
@@ -2074,7 +2045,7 @@ const ActionsView = ({
       {!walletSession && showActionCommand && actionCommand && (
         <div className="mt-3">
           <div className="card">
-            <div className="card-header d-flex justify-content-between align-items-center">
+            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
               <h5 className="mb-0">CLI Command</h5>
               <Button 
                 variant={copySuccess ? "success" : "primary"}

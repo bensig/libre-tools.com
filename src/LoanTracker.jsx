@@ -608,7 +608,7 @@ const LoanTracker = () => {
             </div>
           )}
           <div className="card">
-            <div className="card-header d-flex justify-content-between align-items-center">
+            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
               <h5 className="mb-0">
                 {view === 'completed' ? 'Completed Loans' : 
                  view === 'liquidations' ? 'Liquidations' : 
