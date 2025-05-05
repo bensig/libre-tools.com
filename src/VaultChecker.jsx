@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Button, Alert, Spinner, Table } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
-const VaultTracker = () => {
+const VaultChecker = () => {
   const [account, setAccount] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -152,7 +152,7 @@ const VaultTracker = () => {
         console.warn('Failed to fetch BTC balance from mempool');
       }
 
-      // Step 4: Get the CBTC balance on Libre
+      // Step 4: Get the CBTC balance on Libre (displayed as Collateral Balance with BTC symbol)
       const cbtcBalanceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_currency_balance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -310,7 +310,7 @@ const VaultTracker = () => {
         <div className="col-md-12">
           <div className="card shadow-sm">
             <div className="card-header bg-primary text-white">
-              <h4 className="mb-0">Vault Tracker</h4>
+              <h4 className="mb-0">Vault Checker</h4>
             </div>
             <div className="card-body">
               <Form onSubmit={handleSubmit}>
@@ -422,8 +422,8 @@ const VaultTracker = () => {
                             <td>{result.btcBalance.toFixed(8)} BTC</td>
                           </tr>
                           <tr>
-                            <th>CBTC Balance</th>
-                            <td>{result.cbtcBalance.toFixed(8)} CBTC</td>
+                            <th>Collateral Balance</th>
+                            <td>{result.cbtcBalance.toFixed(8)} BTC</td>
                           </tr>
                           <tr>
                             <th>Vault State</th>
@@ -504,4 +504,4 @@ const VaultTracker = () => {
   );
 };
 
-export default VaultTracker;
+export default VaultChecker;

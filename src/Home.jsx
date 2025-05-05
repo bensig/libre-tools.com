@@ -19,8 +19,8 @@ const Home = () => {
       description: 'Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks. Monitor cross-chain transaction status.'
     },
     {
-      title: 'Vault Tracker',
-      path: '/vault-tracker',
+      title: 'Vault Checker',
+      path: '/vault-checker',
       description: 'Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.'
     },
     {
