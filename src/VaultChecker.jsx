@@ -3,7 +3,7 @@ import { Form, Button, Alert, Spinner, Table } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
 const VaultChecker = () => {
-  const [account, setAccount] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -56,9 +56,9 @@ const VaultChecker = () => {
     return formatNumber(amount.toFixed(2)) + ' USDT';
   };
 
-  const handleAccountChange = (e) => {
+  const handleSearchInputChange = (e) => {
     const value = e.target.value;
-    setAccount(value);
+    setSearchInput(value);
     setError(null);
   };
 
@@ -68,10 +68,15 @@ const VaultChecker = () => {
     setResult(null);
   };
 
+  const isVaultName = (input) => {
+    return input.trim().endsWith('.loan');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!account) {
-      setError('Please enter a Libre account name');
+    
+    if (!searchInput) {
+      setError('Please enter a Libre account name or vault name');
       return;
     }
 
@@ -81,8 +86,9 @@ const VaultChecker = () => {
 
     try {
       const baseEndpoint = getApiEndpoint();
+      const isVault = isVaultName(searchInput);
       
-      // Step 1: Find the vault for this account
+      // Step 1: Find the vault info
       const vaultResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -100,15 +106,35 @@ const VaultChecker = () => {
       }
 
       const vaultData = await vaultResponse.json();
-      const vaultInfo = vaultData.rows.find(row => row.owner === account);
-
-      if (!vaultInfo) {
-        setError(`No vault found for account: ${account}`);
-        setIsLoading(false);
-        return;
+      let vaultInfo;
+      let accountName;
+      let vaultAccount;
+      
+      if (!isVault) {
+        // Searching by account name
+        vaultInfo = vaultData.rows.find(row => row.owner === searchInput);
+        
+        if (!vaultInfo) {
+          setError(`No vault found for account: ${searchInput}`);
+          setIsLoading(false);
+          return;
+        }
+        
+        accountName = searchInput;
+        vaultAccount = vaultInfo.vault;
+      } else {
+        // Searching by vault name
+        vaultInfo = vaultData.rows.find(row => row.vault === searchInput);
+        
+        if (!vaultInfo) {
+          setError(`No owner found for vault: ${searchInput}`);
+          setIsLoading(false);
+          return;
+        }
+        
+        accountName = vaultInfo.owner;
+        vaultAccount = searchInput;
       }
-
-      const vaultAccount = vaultInfo.vault;
 
       // Step 2: Get the BTC address for this vault
       const btcAddressResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
@@ -189,7 +215,7 @@ const VaultChecker = () => {
       let loanInfo = null;
       if (loanResponse.ok) {
         const loanData = await loanResponse.json();
-        loanInfo = loanData.rows.find(row => row.account === account);
+        loanInfo = loanData.rows.find(row => row.account === accountName);
       } else {
         console.warn('Failed to fetch loan data');
       }
@@ -264,7 +290,7 @@ const VaultChecker = () => {
 
       // Prepare the result
       setResult({
-        account,
+        account: accountName,
         vault: vaultAccount,
         btcAddress,
         btcBalance,
@@ -328,19 +354,22 @@ const VaultChecker = () => {
                     </Form.Group>
                     
                     <Form.Group className="mb-3">
-                      <Form.Label>Libre Account</Form.Label>
+                      <Form.Label>Libre Account or Vault Name</Form.Label>
                       <Form.Control
                         type="text"
-                        value={account}
-                        onChange={handleAccountChange}
-                        placeholder="Enter Libre account name"
+                        value={searchInput}
+                        onChange={handleSearchInputChange}
+                        placeholder="Enter account name or vault name (ends with .loan)"
                       />
+                      <Form.Text className="text-muted">
+                        Enter a Libre account name (e.g. nobi) or a vault name (e.g. 2kcv5ga.loan)
+                      </Form.Text>
                     </Form.Group>
                     
                     <Button 
                       variant="primary" 
                       type="submit" 
-                      disabled={isLoading || !account}
+                      disabled={isLoading || !searchInput}
                       className="mb-3"
                     >
                       {isLoading ? (
