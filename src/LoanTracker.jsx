@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Form, Button, Table, Alert, Spinner } from "react-bootstrap";
+import { Form, Button, Table, Alert, Spinner, Dropdown } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -616,26 +616,32 @@ const LoanTracker = () => {
                  'Active Loans'}
               </h5>
               <div>
-                <Button
-                  variant={view === 'active' ? 'primary' : 'outline-primary'}
-                  onClick={() => handleViewChange('active')}
-                  className="me-2"
-                >
-                  Active
-                </Button>
-                <Button
-                  variant={view === 'completed' ? 'primary' : 'outline-primary'}
-                  onClick={() => handleViewChange('completed')}
-                  className="me-2"
-                >
-                  Completed
-                </Button>
-                <Button
-                  variant={view === 'liquidations' ? 'primary' : 'outline-primary'}
-                  onClick={() => handleViewChange('liquidations')}
-                >
-                  Liquidations
-                </Button>
+                <Dropdown className="d-inline-block">
+                  <Dropdown.Toggle variant="primary" id="view-selector">
+                    {view === 'active' ? 'Active' : 
+                     view === 'completed' ? 'Completed' : 'Liquidations'}
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu>
+                    <Dropdown.Item 
+                      active={view === 'active'} 
+                      onClick={() => handleViewChange('active')}
+                    >
+                      Active
+                    </Dropdown.Item>
+                    <Dropdown.Item 
+                      active={view === 'completed'} 
+                      onClick={() => handleViewChange('completed')}
+                    >
+                      Completed
+                    </Dropdown.Item>
+                    <Dropdown.Item 
+                      active={view === 'liquidations'} 
+                      onClick={() => handleViewChange('liquidations')}
+                    >
+                      Liquidations
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown>
               </div>
             </div>
             <div className="card-body">

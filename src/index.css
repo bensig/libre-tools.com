@@ -65,3 +65,17 @@ a {
 .navbar-dark .navbar-nav .nav-link {
   color: white !important;
 }
+
+/* Make disabled buttons readable */
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.8 !important;
+  color: white !important;
+  pointer-events: auto !important;
+}
+
+/* Style for card buttons */
+.card-header .dropdown-toggle.btn-primary {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
