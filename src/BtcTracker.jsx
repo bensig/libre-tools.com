@@ -350,9 +350,7 @@ const BtcTracker = () => {
           <div className="alert alert-info mb-4 d-flex">
             <i className="bi bi-info-circle me-2"></i>
             <div>
-              Track the status of Bitcoin peg-in and peg-out transactions. 
-              <br />
-              Enter either a Libre transaction hash (for peg-outs) or a Bitcoin transaction hash (for peg-ins).
+              Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks.
             </div>
           </div>
 

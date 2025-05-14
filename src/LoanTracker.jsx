@@ -516,40 +516,41 @@ const LoanTracker = () => {
   };
 
   return (
-    <div className="container">
-      <div className="row mb-4">
-        <div className="col">
-          <h2>Global Loan Stats</h2>
-        </div>
-      </div>
+    <div className="container-fluid">
+      <div className="d-flex justify-content-center">
+        <div style={{ width: '100%' }}>
+          <h2 className="mb-4">Global Loan Stats</h2>
+          
+          <div className="alert alert-info mb-4">
+            <i className="bi bi-info-circle me-2"></i>
+            Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.
+          </div>
+          
+          <div style={{ maxWidth: '300px' }} className="mb-4">
+            <NetworkSelector
+              network={network}
+              setNetwork={setNetwork}
+              customEndpoint={customEndpoint}
+              setCustomEndpoint={setCustomEndpoint}
+              customEndpointError={''}
+              setCustomEndpointError={() => {}}
+            />
+          </div>
 
-      <div className="row mb-4">
-        <div className="col">
-          <NetworkSelector
-            network={network}
-            setNetwork={setNetwork}
-            customEndpoint={customEndpoint}
-            setCustomEndpoint={setCustomEndpoint}
-            customEndpointError={''}
-            setCustomEndpointError={() => {}}
-          />
-        </div>
-      </div>
+          {error && (
+            <Alert variant="danger" className="mb-4">
+              {error}
+            </Alert>
+          )}
 
-      {error && (
-        <Alert variant="danger" className="mb-4">
-          {error}
-        </Alert>
-      )}
-
-      {isLoading ? (
-        <div className="text-center my-5">
-          <Spinner animation="border" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </Spinner>
-        </div>
-      ) : (
-        <>
+          {isLoading ? (
+            <div className="text-center my-5">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
+          ) : (
+            <>
           <div className="row mb-4">
             <div className="col-md-4">
               <div className="card">
@@ -715,7 +716,9 @@ const LoanTracker = () => {
             </div>
           </div>
         </>
-      )}
+          )}
+        </div>
+      </div>
     </div>
   );
 };

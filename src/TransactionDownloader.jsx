@@ -240,11 +240,11 @@ export default function TransactionDownloader() {
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
         <div style={{ width: '100%' }}>
-          <h2 className="mb-4">Transaction Downloader</h2>
+          <h2 className="mb-4">Account History</h2>
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
-            Download transaction history for any Libre account. Filter by date range and specific contract actions.
+            Download account history for any Libre account. Filter by date range and specific contract actions.
           </div>
 
           <Form onSubmit={handleSubmit}>

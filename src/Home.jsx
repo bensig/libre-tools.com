@@ -9,9 +9,9 @@ const Home = () => {
       description: 'Browse and inspect smart contract data on the Libre blockchain. View table contents, scope data, and contract actions.'
     },
     {
-      title: 'Transaction History',
+      title: 'Account History',
       path: '/transactions',
-      description: 'Download and analyze transaction history for any Libre account. Filter by date range and export to CSV format.'
+      description: 'Download and analyze account history for any Libre account. Filter by date range and export to CSV format.'
     },
     {
       title: 'BTC Transaction Tracker',

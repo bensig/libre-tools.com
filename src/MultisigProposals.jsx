@@ -254,37 +254,45 @@ const MultisigProposals = () => {
   };
 
   return (
-    <div className="container">
-      <h2 className="mb-4">Multisig Proposals</h2>
-      
-      <div className="mb-4" style={{ maxWidth: '300px' }}>
-        <NetworkSelector
-          network={network}
-          setNetwork={setNetwork}
-          customEndpoint={customEndpoint}
-          setCustomEndpoint={setCustomEndpoint}
-          customEndpointError={customEndpointError}
-          setCustomEndpointError={setCustomEndpointError}
-        />
-      </div>
+    <div className="container-fluid">
+      <div className="d-flex justify-content-center">
+        <div style={{ width: '100%' }}>
+          <h2 className="mb-4">Multisig Proposals</h2>
+          
+          <div className="alert alert-info mb-4">
+            <i className="bi bi-info-circle me-2"></i>
+            Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations. 
+            These often include ratification of DAO proposals - see <a href="https://defi.libre.org/dao" target="_blank" rel="noopener noreferrer" className="alert-link">defi.libre.org/dao</a> for more information.
+          </div>
+          
+          <div className="mb-4" style={{ maxWidth: '300px' }}>
+            <NetworkSelector
+              network={network}
+              setNetwork={setNetwork}
+              customEndpoint={customEndpoint}
+              setCustomEndpoint={setCustomEndpoint}
+              customEndpointError={customEndpointError}
+              setCustomEndpointError={setCustomEndpointError}
+            />
+          </div>
 
-      {error && (
-        <Alert variant="danger" className="mb-4">
-          {error}
-        </Alert>
-      )}
+          {error && (
+            <Alert variant="danger" className="mb-4">
+              {error}
+            </Alert>
+          )}
 
-      {isLoading ? (
-        <div className="text-center">
-          <Spinner animation="border" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </Spinner>
-        </div>
-      ) : (
-        <div>
-          {proposals
-            .sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a))
-            .map((proposal) => (
+          {isLoading ? (
+            <div className="text-center">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
+          ) : (
+            <div>
+              {proposals
+                .sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a))
+                .map((proposal) => (
             <Card key={`${proposal.scope}-${proposal.proposal_name}`} className="mb-4">
               <Card.Header className="d-flex justify-content-between align-items-center">
                 <div>
@@ -389,8 +397,10 @@ const MultisigProposals = () => {
               </Card.Body>
             </Card>
           ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

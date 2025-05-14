@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form, Button, Alert, Spinner, Table } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
@@ -23,11 +23,19 @@ const VaultChecker = () => {
   };
 
   const getApiEndpoint = () => {
-    if (network === 'custom') {
+    if (network === 'custom-libre-btc-mainnet' || network === 'custom-libre-btc-signet') {
       if (!customEndpoint) {
         throw new Error('Custom endpoint is required');
       }
-      return formatEndpoint(customEndpoint);
+      
+      const btcEndpoint = network === 'custom-libre-btc-signet' 
+        ? 'https://mempool.space/signet'
+        : 'https://mempool.space';
+        
+      return {
+        libre: formatEndpoint(customEndpoint),
+        btc: btcEndpoint
+      };
     }
     return NETWORK_ENDPOINTS[network];
   };
@@ -62,11 +70,11 @@ const VaultChecker = () => {
     setError(null);
   };
 
-  const handleNetworkChange = (newNetwork) => {
-    setNetwork(newNetwork);
+  // Effect to clear error and result when network changes
+  useEffect(() => {
     setError(null);
     setResult(null);
-  };
+  }, [network, customEndpoint]);
 
   const isVaultName = (input) => {
     return input.trim().endsWith('.loan');
@@ -220,14 +228,15 @@ const VaultChecker = () => {
         console.warn('Failed to fetch loan data');
       }
 
-      // Step 6: Get BTC price from Chainlink price feed
+      // Step 6: Get BTC price from Chainlink price feed or oracle
+      const oracleCode = network === 'mainnet' || network === 'custom-libre-btc-mainnet' ? 'chainlink' : 'oracletest';
       const btcPriceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: 'chainlink',
+          code: oracleCode,
           table: 'feed',
-          scope: 'chainlink',
+          scope: oracleCode,
           limit: 100,
           json: true
         })
@@ -244,7 +253,7 @@ const VaultChecker = () => {
           }
         }
       } else {
-        console.warn('Failed to fetch BTC price from Chainlink');
+        console.warn(`Failed to fetch BTC price from ${oracleCode}`);
         
         // Fallback to oracle.libre if Chainlink fails
         const oracleResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
@@ -331,28 +340,41 @@ const VaultChecker = () => {
   };
 
   return (
-    <div className="container mt-4">
-      <div className="row">
-        <div className="col-md-12">
-          <div className="card shadow-sm">
+    <div className="container-fluid">
+      <div className="d-flex justify-content-center">
+        <div style={{ width: '100%' }}>
+          <h2 className="mb-4">Vault Checker</h2>
+          
+          <div className="alert alert-info mb-4">
+            <i className="bi bi-info-circle me-2"></i>
+            Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.
+          </div>
+
+          <div style={{ maxWidth: '300px' }} className="mb-4">
+            <NetworkSelector 
+              network={network} 
+              setNetwork={setNetwork}
+              customEndpoint={customEndpoint}
+              setCustomEndpoint={setCustomEndpoint}
+              customEndpointError={customEndpointError}
+              setCustomEndpointError={setCustomEndpointError}
+            />
+          </div>
+
+          {error && (
+            <Alert variant="danger" className="mb-4">
+              {error}
+            </Alert>
+          )}
+
+          <div className="card mb-4">
             <div className="card-header bg-primary text-white">
-              <h4 className="mb-0">Vault Checker</h4>
+              <h5 className="mb-0">Search Vault</h5>
             </div>
             <div className="card-body">
               <Form onSubmit={handleSubmit}>
-                <div className="row mb-3">
+                <div className="row">
                   <div className="col-md-6">
-                    <Form.Group className="mb-3">
-                      <Form.Label>Network</Form.Label>
-                      <NetworkSelector 
-                        network={network} 
-                        onNetworkChange={handleNetworkChange}
-                        customEndpoint={customEndpoint}
-                        onCustomEndpointChange={(e) => setCustomEndpoint(e.target.value)}
-                        customEndpointError={customEndpointError}
-                      />
-                    </Form.Group>
-                    
                     <Form.Group className="mb-3">
                       <Form.Label>Libre Account or Vault Name</Form.Label>
                       <Form.Control
@@ -391,142 +413,137 @@ const VaultChecker = () => {
                   </div>
                 </div>
               </Form>
-
-              {error && (
-                <Alert variant="danger" className="mt-3">
-                  {error}
-                </Alert>
-              )}
-
-              {result && (
-                <div className="mt-4">
-                  <div className="card shadow-sm mb-4">
-                    <div className="card-header bg-primary text-white">
-                      <h5 className="mb-0">Vault Information</h5>
-                    </div>
-                    <div className="card-body">
-                      <Table striped bordered hover responsive>
-                        <tbody>
-                          <tr>
-                            <th style={{width: '200px'}}>Libre Account</th>
-                            <td>
-                              <a 
-                                href={`https://explorer.libre.org/account/${result.account}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary"
-                              >
-                                {result.account}
-                              </a>
-                            </td>
-                          </tr>
-                          <tr>
-                            <th>Vault</th>
-                            <td>
-                              <a 
-                                href={`https://explorer.libre.org/account/${result.vault}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary"
-                              >
-                                {result.vault}
-                              </a>
-                            </td>
-                          </tr>
-                          <tr>
-                            <th>BTC Address</th>
-                            <td>
-                              <a 
-                                href={`${getApiEndpoint().btc}/address/${result.btcAddress}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary"
-                              >
-                                {result.btcAddress}
-                              </a>
-                            </td>
-                          </tr>
-                          <tr>
-                            <th>BTC Balance</th>
-                            <td>{result.btcBalance.toFixed(8)} BTC</td>
-                          </tr>
-                          <tr>
-                            <th>Collateral Balance</th>
-                            <td>{result.cbtcBalance.toFixed(8)} BTC</td>
-                          </tr>
-                          <tr>
-                            <th>Vault State</th>
-                            <td>
-                              <span className={result.vaultSyncStatus === "IN SYNC" ? "text-success fw-bold" : "text-warning fw-bold"}>
-                                {result.vaultSyncStatus}
-                              </span>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </Table>
-                    </div>
-                  </div>
-
-                  {result.hasLoan ? (
-                    <div className="card shadow-sm">
-                      <div className="card-header bg-primary text-white">
-                        <h5 className="mb-0">Loan Information</h5>
-                      </div>
-                      <div className="card-body">
-                        <Table striped bordered hover responsive>
-                          <tbody>
-                            <tr>
-                              <th style={{width: '200px'}}>Loan ID</th>
-                              <td>{result.loanInfo.id}</td>
-                            </tr>
-                            <tr>
-                              <th>Loan State</th>
-                              <td>{renderLoanStatus(result.loanInfo.status)}</td>
-                            </tr>
-                            <tr>
-                              <th>Initial Amount</th>
-                              <td>{formatUSDT(result.loanInfo.initial_amount)}</td>
-                            </tr>
-                            <tr>
-                              <th>Outstanding Amount</th>
-                              <td>{formatUSDT(result.loanInfo.outstanding_amount)}</td>
-                            </tr>
-                            <tr>
-                              <th>Collateral Value</th>
-                              <td>${formatNumber(result.collateralValue.toFixed(2))}</td>
-                            </tr>
-                            <tr>
-                              <th>Loan-to-Value (LTV)</th>
-                              <td>{formatNumber(result.ltv.toFixed(2))}%</td>
-                            </tr>
-                            <tr>
-                              <th>APR</th>
-                              <td>{(result.loanInfo.terms.apr / 100).toFixed(2)}%</td>
-                            </tr>
-                            <tr>
-                              <th>Start Date</th>
-                              <td>{new Date(result.loanInfo.start_time).toLocaleString()}</td>
-                            </tr>
-                          </tbody>
-                        </Table>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="card shadow-sm">
-                      <div className="card-header bg-primary text-white">
-                        <h5 className="mb-0">Loan Information</h5>
-                      </div>
-                      <div className="card-body">
-                        <Alert variant="info" className="mb-0">
-                          No active loan found for this account.
-                        </Alert>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
+
+          {isLoading && (
+            <div className="text-center my-5">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
+          )}
+
+          {result && !isLoading && (
+            <>
+              <div className="card mb-4">
+                <div className="card-header bg-primary text-white">
+                  <h5 className="mb-0">Vault Information</h5>
+                </div>
+                <div className="card-body">
+                  <Table striped bordered hover responsive>
+                    <tbody>
+                      <tr>
+                        <th style={{width: '200px'}}>Libre Account</th>
+                        <td>
+                          <a 
+                            href={`https://explorer.libre.org/account/${result.account}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary"
+                          >
+                            {result.account}
+                          </a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Vault</th>
+                        <td>
+                          <a 
+                            href={`https://explorer.libre.org/account/${result.vault}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary"
+                          >
+                            {result.vault}
+                          </a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>BTC Address</th>
+                        <td>
+                          <a 
+                            href={`${getApiEndpoint().btc}/address/${result.btcAddress}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary"
+                          >
+                            {result.btcAddress}
+                          </a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>BTC Balance</th>
+                        <td>{result.btcBalance.toFixed(8)} BTC</td>
+                      </tr>
+                      <tr>
+                        <th>Collateral Balance</th>
+                        <td>{result.cbtcBalance.toFixed(8)} BTC</td>
+                      </tr>
+                      <tr>
+                        <th>Vault State</th>
+                        <td>
+                          <span className={result.vaultSyncStatus === "IN SYNC" ? "text-success fw-bold" : "text-warning fw-bold"}>
+                            {result.vaultSyncStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-header bg-primary text-white">
+                  <h5 className="mb-0">Loan Information</h5>
+                </div>
+                <div className="card-body">
+                  {result.hasLoan ? (
+                    <Table striped bordered hover responsive>
+                      <tbody>
+                        <tr>
+                          <th style={{width: '200px'}}>Loan ID</th>
+                          <td>{result.loanInfo.id}</td>
+                        </tr>
+                        <tr>
+                          <th>Loan State</th>
+                          <td>{renderLoanStatus(result.loanInfo.status)}</td>
+                        </tr>
+                        <tr>
+                          <th>Initial Amount</th>
+                          <td>{formatUSDT(result.loanInfo.initial_amount)}</td>
+                        </tr>
+                        <tr>
+                          <th>Outstanding Amount</th>
+                          <td>{formatUSDT(result.loanInfo.outstanding_amount)}</td>
+                        </tr>
+                        <tr>
+                          <th>Collateral Value</th>
+                          <td>${formatNumber(result.collateralValue.toFixed(2))}</td>
+                        </tr>
+                        <tr>
+                          <th>Loan-to-Value (LTV)</th>
+                          <td>{formatNumber(result.ltv.toFixed(2))}%</td>
+                        </tr>
+                        <tr>
+                          <th>APR</th>
+                          <td>{(result.loanInfo.terms.apr / 100).toFixed(2)}%</td>
+                        </tr>
+                        <tr>
+                          <th>Start Date</th>
+                          <td>{new Date(result.loanInfo.start_time).toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info" className="mb-0">
+                      No active loan found for this account.
+                    </Alert>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
