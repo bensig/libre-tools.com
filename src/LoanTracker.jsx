@@ -160,7 +160,7 @@ const LoanTracker = () => {
           code: 'loan',
           table: 'loan',
           scope,
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
@@ -189,7 +189,7 @@ const LoanTracker = () => {
           code: 'loan',
           table: 'liquidation',
           scope: scope,
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
@@ -218,7 +218,7 @@ const LoanTracker = () => {
           code: 'loan',
           table: 'vault',
           scope: 'loan',
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
@@ -308,7 +308,7 @@ const LoanTracker = () => {
           code: network === 'mainnet' ? 'chainlink' : 'oracletest',
           table: 'feed',
           scope: network === 'mainnet' ? 'chainlink' : 'oracletest',
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });

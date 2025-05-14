@@ -104,7 +104,7 @@ const VaultChecker = () => {
           code: 'loan',
           table: 'vault',
           scope: 'loan',
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
@@ -215,7 +215,7 @@ const VaultChecker = () => {
           code: 'loan',
           table: 'loan',
           scope: 'loan',
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
@@ -237,7 +237,7 @@ const VaultChecker = () => {
           code: oracleCode,
           table: 'feed',
           scope: oracleCode,
-          limit: 100,
+          limit: 1000,
           json: true
         })
       });
