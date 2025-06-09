@@ -433,7 +433,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Libre Hash:</strong>{' '}
                         <a 
-                          href={`https://explorer.libre.org/tx/${result.libreHash}`}
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/tx/${result.libreHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
@@ -498,7 +498,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Libre Hash:</strong>{' '}
                         <a 
-                          href={`https://explorer.libre.org/tx/${result.libreHash}`}
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/tx/${result.libreHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"
@@ -513,7 +513,7 @@ const BtcTracker = () => {
                       <p>
                         <strong>Destination Libre Account:</strong>{' '}
                         <a 
-                          href={`https://explorer.libre.org/address/${result.libreAccount}`}
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.libreAccount}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark"

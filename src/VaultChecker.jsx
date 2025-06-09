@@ -65,7 +65,7 @@ const VaultChecker = () => {
   };
 
   const handleSearchInputChange = (e) => {
-    const value = e.target.value;
+    const value = e.target.value.toLowerCase();
     setSearchInput(value);
     setError(null);
   };
@@ -437,7 +437,7 @@ const VaultChecker = () => {
                         <th style={{width: '200px'}}>Libre Account</th>
                         <td>
                           <a 
-                            href={`https://explorer.libre.org/account/${result.account}`}
+                            href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.account}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary"
@@ -450,7 +450,7 @@ const VaultChecker = () => {
                         <th>Vault</th>
                         <td>
                           <a 
-                            href={`https://explorer.libre.org/account/${result.vault}`}
+                            href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.vault}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary"

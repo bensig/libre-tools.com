@@ -264,7 +264,7 @@ export default function TransactionDownloader() {
               <Form.Control
                 type="text"
                 value={formData.account}
-                onChange={e => setFormData({...formData, account: e.target.value})}
+                onChange={e => setFormData({...formData, account: e.target.value.toLowerCase()})}
                 required
                 autoFocus
                 name="accountName"
@@ -310,7 +310,7 @@ export default function TransactionDownloader() {
                   <Form.Control
                     type="text"
                     value={formData.contract}
-                    onChange={e => setFormData({...formData, contract: e.target.value})}
+                    onChange={e => setFormData({...formData, contract: e.target.value.toLowerCase()})}
                   />
                 </Form.Group>
 
