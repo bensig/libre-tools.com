@@ -29,6 +29,7 @@ const LoanTracker = () => {
   });
   const [vaultAccounts, setVaultAccounts] = useState({});
   const [vaultBalances, setVaultBalances] = useState({});
+  const [vaultAddresses, setVaultAddresses] = useState({});
   const [btcPrice, setBtcPrice] = useState(0);
 
   const getApiEndpoint = () => {
@@ -240,6 +241,38 @@ const LoanTracker = () => {
     }
   };
 
+  const fetchAllVaultAddresses = async () => {
+    try {
+      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: 'v.libre',
+          table: 'accounts',
+          scope: 'v.libre',
+          limit: 10000,
+          json: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch vault addresses');
+      }
+
+      const data = await response.json();
+      const addressMap = {};
+      data.rows.forEach(row => {
+        addressMap[row.account] = row.btc_address;
+      });
+      return addressMap;
+    } catch (error) {
+      console.error('Error fetching vault addresses:', error);
+      return {};
+    }
+  };
+
   const fetchVaultBalance = async (vaultAccount) => {
     try {
       // Fetch both CBTC and BTC balances in parallel
@@ -423,13 +456,30 @@ const LoanTracker = () => {
         setVaultAccounts(vaults);
         setBtcPrice(btcPriceData);
 
-        // Fetch balances for all vault accounts
+        // Fetch all vault addresses in one request
+        const allVaultAddresses = await fetchAllVaultAddresses();
+        
+        // Map owner accounts to their bitcoin addresses
+        const ownerAddresses = {};
+        Object.entries(vaults).forEach(([owner, vault]) => {
+          if (allVaultAddresses[vault]) {
+            ownerAddresses[owner] = allVaultAddresses[vault];
+          }
+        });
+        setVaultAddresses(ownerAddresses);
+        
+        // Only fetch balances for active loans (not all vaults)
         const balances = {};
-        await Promise.all(
-          Object.values(vaults).map(async (vault) => {
-            balances[vault] = await fetchVaultBalance(vault);
-          })
-        );
+        if (activeLoans.length > 0) {
+          // Get unique vault accounts from active loans only
+          const activeVaultAccounts = [...new Set(activeLoans.map(loan => vaults[loan.account]).filter(Boolean))];
+          
+          await Promise.all(
+            activeVaultAccounts.map(async (vault) => {
+              balances[vault] = await fetchVaultBalance(vault);
+            })
+          );
+        }
         setVaultBalances(balances);
 
         await fetchPoolStats();
@@ -519,7 +569,7 @@ const LoanTracker = () => {
     <div className="container-fluid">
       <div className="d-flex justify-content-center">
         <div style={{ width: '100%' }}>
-          <h2 className="mb-4">Global Loan Stats</h2>
+          <h2 className="mb-4">Loan Overview</h2>
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
@@ -694,14 +744,38 @@ const LoanTracker = () => {
                         return (
                           <tr key={loan.id}>
                             <td>{loan.id}</td>
-                            <td>{loan.account}</td>
+                            <td>
+                              {view === 'active' && vaultAddresses[loan.account] ? (
+                                <a 
+                                  href={`https://mempool.space/address/${vaultAddresses[loan.account]}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary"
+                                >
+                                  {loan.account}
+                                </a>
+                              ) : (
+                                loan.account
+                              )}
+                            </td>
                             <td>{formatUSDT(loan.initial_amount)}</td>
                             <td>{formatUSDT(loan.outstanding_amount)}</td>
                             <td>{(loan.terms?.apr / 100).toFixed(2)}%</td>
                             {view === 'active' && (
                               <>
                                 <td>
-                                  {parseFloat(collateral.total).toFixed(8)}
+                                  {vaultAddresses[loan.account] ? (
+                                    <a 
+                                      href={`https://mempool.space/address/${vaultAddresses[loan.account]}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary"
+                                    >
+                                      {parseFloat(collateral.total).toFixed(8)} BTC
+                                    </a>
+                                  ) : (
+                                    `${parseFloat(collateral.total).toFixed(8)} BTC`
+                                  )}
                                 </td>
                                 <td>${formatNumber(collateralValue.toFixed(2))}</td>
                                 <td>{formatNumber(ltv.toFixed(2))}%</td>

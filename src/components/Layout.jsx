@@ -18,14 +18,13 @@ const Layout = ({ children }) => {
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav">
             <Nav className="me-auto">
-              <Nav.Link as={Link} to="/" className="fs-6">Home</Nav.Link>
-              <Nav.Link as={Link} to="/explorer" className="fs-6">Smart Contract Explorer</Nav.Link>
-              <Nav.Link as={Link} to="/transactions" className="fs-6">Account History</Nav.Link>
-              <Nav.Link as={Link} to="/btc-tracker" className="fs-6">BTC Tracker</Nav.Link>
-              <Nav.Link as={Link} to="/vault-checker" className="fs-6">Vault Checker</Nav.Link>
-              <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed Generator</Nav.Link>
-              <Nav.Link as={Link} to="/multisig" className="fs-6">Multisig Proposals</Nav.Link>
-              <Nav.Link as={Link} to="/loans" className="fs-6">Global Loan Stats</Nav.Link>
+              <Nav.Link as={Link} to="/loans" className="fs-6">Loans</Nav.Link>
+              <Nav.Link as={Link} to="/explorer" className="fs-6">Contracts</Nav.Link>
+              <Nav.Link as={Link} to="/transactions" className="fs-6">Accounts</Nav.Link>
+              <Nav.Link as={Link} to="/btc-tracker" className="fs-6">Bridge</Nav.Link>
+              <Nav.Link as={Link} to="/vault-checker" className="fs-6">Vaults</Nav.Link>
+              <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed</Nav.Link>
+              <Nav.Link as={Link} to="/multisig" className="fs-6">Multisig</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>

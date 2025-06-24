@@ -4,39 +4,39 @@ import { Link } from 'react-router-dom';
 const Home = () => {
   const tools = [
     {
-      title: 'Smart Contract Explorer',
+      title: 'Loan Overview',
+      path: '/loans',
+      description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.'
+    },
+    {
+      title: 'Contract Explorer',
       path: '/explorer',
       description: 'Browse and inspect smart contract data on the Libre blockchain. View table contents, scope data, and contract actions.'
     },
     {
-      title: 'Account History',
+      title: 'Account History Viewer',
       path: '/transactions',
       description: 'Download and analyze account history for any Libre account. Filter by date range and export to CSV format.'
     },
     {
-      title: 'BTC Transaction Tracker',
+      title: 'Bitcoin Bridge Tracker',
       path: '/btc-tracker',
       description: 'Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks. Monitor cross-chain transaction status.'
     },
     {
-      title: 'Vault Checker',
+      title: 'Vault Inspector',
       path: '/vault-checker',
       description: 'Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.'
     },
     {
-      title: 'Seed Generator',
+      title: 'Entropy-Based Seed Tool',
       path: '/seed-generator',
       description: 'Generate a 128-bit or 256-bit seed phrase by moving your mouse to create entropy.'
     },
     {
-      title: 'Multisig Proposals',
+      title: 'Multisig Proposal Viewer',
       path: '/multisig',
       description: 'Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations.'
-    },
-    {
-      title: 'Global Loan Stats',
-      path: '/loans',
-      description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.'
     }
   ];
 
@@ -50,7 +50,7 @@ const Home = () => {
             <i className="bi bi-info-circle me-2"></i>
             Open-source tools provided by Quantum validator on Libre - please{' '}
             <a 
-              href="https://dashboard.libre.org/validators" 
+              href="https://defi.libre.org/validators" 
               target="_blank" 
               rel="noopener noreferrer"
               className="alert-link"
