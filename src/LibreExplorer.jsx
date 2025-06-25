@@ -6,6 +6,7 @@ import { WalletPluginAnchor } from "@wharfkit/wallet-plugin-anchor";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WebRenderer } from "@wharfkit/web-renderer";
+import { isCurrencyStatsTable, formatScopeDisplay, encodeSymbolCode } from './utils/symbolCodec';
 
 const LibreExplorer = () => {
   const { network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope } = useParams();
@@ -1647,17 +1648,22 @@ const LibreExplorer = () => {
                         <div className="mb-3">
                             <label className="form-label">Scope</label>
                             <div className="d-flex gap-2 flex-wrap">
-                                {scopes.map(scopeData => (
-                                    <Button
-                                        key={scopeData.scope}
-                                        variant={scope === scopeData.scope ? "primary" : "outline-primary"}
-                                        onClick={() => handleScopeChange(scopeData.scope)}
-                                        className="mb-2"
-                                    >
-                                        {scopeData.scope}
-                                        {scopeData.count > 0 && ` (${scopeData.count})`}
-                                    </Button>
-                                ))}
+                                {scopes.map(scopeData => {
+                                    const isCurrencyStats = isCurrencyStatsTable(abiData, selectedTable);
+                                    const displayScope = formatScopeDisplay(scopeData.scope, isCurrencyStats);
+                                    return (
+                                        <Button
+                                            key={scopeData.scope}
+                                            variant={scope === scopeData.scope ? "primary" : "outline-primary"}
+                                            onClick={() => handleScopeChange(scopeData.scope)}
+                                            className="mb-2"
+                                            title={isCurrencyStats && displayScope !== scopeData.scope ? `Raw scope: ${scopeData.scope}` : undefined}
+                                        >
+                                            {displayScope}
+                                            {scopeData.count > 0 && ` (${scopeData.count})`}
+                                        </Button>
+                                    );
+                                })}
                                 <Button
                                     variant="outline-secondary"
                                     onClick={() => setShowCustomScopeModal(true)}
@@ -1718,7 +1724,11 @@ const LibreExplorer = () => {
                             </div>
                         ) : selectedTable && scope && rows.length === 0 && !error ? (
                             <Alert variant="warning" className="mb-3">
-                                <div>No data found in scope "{scope}". You can verify using:</div>
+                                <div>No data found in scope "{(() => {
+                                    const isCurrencyStats = isCurrencyStatsTable(abiData, selectedTable);
+                                    const displayScope = formatScopeDisplay(scope, isCurrencyStats);
+                                    return displayScope !== scope ? `${displayScope} (${scope})` : scope;
+                                })()}". You can verify using:</div>
                                 <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
                                     curl -X POST {getApiEndpoint()}/v1/chain/get_table_rows \{'\n'}
                                     -H "Content-Type: application/json" \{'\n'}
