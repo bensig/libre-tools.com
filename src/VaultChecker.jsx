@@ -95,18 +95,30 @@ const VaultChecker = () => {
     try {
       const baseEndpoint = getApiEndpoint();
       const isVault = isVaultName(searchInput);
-      
+
       // Step 1: Find the vault info
+      const requestBody = {
+        code: 'loan',
+        table: 'vault',
+        scope: 'loan',
+        limit: 1,
+        json: true
+      };
+
+      // Use lower_bound and upper_bound for efficient lookup
+      if (!isVault) {
+        // Searching by account name (owner field)
+        requestBody.lower_bound = searchInput;
+        requestBody.upper_bound = searchInput;
+      } else {
+        // Searching by vault name - need to scan since vault might be secondary index
+        requestBody.limit = 10000;
+      }
+
       const vaultResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'vault',
-          scope: 'loan',
-          limit: 1000,
-          json: true
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!vaultResponse.ok) {
@@ -117,29 +129,29 @@ const VaultChecker = () => {
       let vaultInfo;
       let accountName;
       let vaultAccount;
-      
+
       if (!isVault) {
         // Searching by account name
         vaultInfo = vaultData.rows.find(row => row.owner === searchInput);
-        
+
         if (!vaultInfo) {
           setError(`No vault found for account: ${searchInput}`);
           setIsLoading(false);
           return;
         }
-        
+
         accountName = searchInput;
         vaultAccount = vaultInfo.vault;
       } else {
         // Searching by vault name
         vaultInfo = vaultData.rows.find(row => row.vault === searchInput);
-        
+
         if (!vaultInfo) {
           setError(`No owner found for vault: ${searchInput}`);
           setIsLoading(false);
           return;
         }
-        
+
         accountName = vaultInfo.owner;
         vaultAccount = searchInput;
       }
