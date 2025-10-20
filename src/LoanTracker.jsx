@@ -39,6 +39,53 @@ const LoanTracker = () => {
     return NETWORK_ENDPOINTS[network] || NETWORK_ENDPOINTS.mainnet;
   };
 
+  const fetchAllTableRows = async (requestBody) => {
+    const rows = [];
+    let lowerBound = requestBody.lower_bound;
+    let previousLowerBound = lowerBound;
+    let more = true;
+
+    while (more) {
+      const body = {
+        ...requestBody,
+        lower_bound: lowerBound
+      };
+
+      if (typeof lowerBound === 'undefined') {
+        delete body.lower_bound;
+      }
+
+      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch table rows');
+      }
+
+      const data = await response.json();
+      rows.push(...(data.rows || []));
+      more = data.more;
+
+      if (more) {
+        const nextKey = data.next_key;
+        if (!nextKey || nextKey === previousLowerBound) {
+          console.warn('Pagination halted early due to missing or repeating next_key');
+          more = false;
+        } else {
+          lowerBound = nextKey;
+          previousLowerBound = nextKey;
+        }
+      }
+    }
+
+    return rows;
+  };
+
   // Format number with commas
   const formatNumber = (value) => {
     return new Intl.NumberFormat('en-US').format(value);
@@ -152,26 +199,14 @@ const LoanTracker = () => {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'loan',
-          scope,
-          limit: 1000,
-          json: true
-        })
+      const rows = await fetchAllTableRows({
+        code: 'loan',
+        table: 'loan',
+        scope,
+        limit: 1000,
+        json: true
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${scope} loans`);
-      }
-
-      const data = await response.json();
-      return data.rows || [];
+      return rows;
     } catch (error) {
       console.error(`Error fetching ${scope} loans:`, error);
       setError(`Failed to fetch ${scope} loans. ` + error.message);
@@ -181,26 +216,14 @@ const LoanTracker = () => {
 
   const fetchLiquidations = async (scope) => {
     try {
-      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'liquidation',
-          scope: scope,
-          limit: 1000,
-          json: true
-        })
+      const rows = await fetchAllTableRows({
+        code: 'loan',
+        table: 'liquidation',
+        scope: scope,
+        limit: 1000,
+        json: true
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch liquidation data');
-      }
-
-      const data = await response.json();
-      return data.rows || [];
+      return rows;
     } catch (error) {
       console.error('Error fetching liquidations:', error);
       setError('Failed to fetch liquidation data. ' + error.message);
@@ -210,27 +233,15 @@ const LoanTracker = () => {
 
   const fetchVaultAccounts = async () => {
     try {
-      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'vault',
-          scope: 'loan',
-          limit: 1000,
-          json: true
-        })
+      const rows = await fetchAllTableRows({
+        code: 'loan',
+        table: 'vault',
+        scope: 'loan',
+        limit: 1000,
+        json: true
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch vault data');
-      }
-
-      const data = await response.json();
       const vaults = {};
-      data.rows.forEach(row => {
+      rows.forEach(row => {
         vaults[row.owner] = row.vault;
       });
       return vaults;
@@ -243,27 +254,15 @@ const LoanTracker = () => {
 
   const fetchAllVaultAddresses = async () => {
     try {
-      const response = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'v.libre',
-          table: 'accounts',
-          scope: 'v.libre',
-          limit: 10000,
-          json: true
-        })
+      const rows = await fetchAllTableRows({
+        code: 'v.libre',
+        table: 'accounts',
+        scope: 'v.libre',
+        limit: 1000,
+        json: true
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch vault addresses');
-      }
-
-      const data = await response.json();
       const addressMap = {};
-      data.rows.forEach(row => {
+      rows.forEach(row => {
         addressMap[row.account] = row.btc_address;
       });
       return addressMap;
