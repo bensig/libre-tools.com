@@ -1,4 +1,4 @@
-import React from 'react';
+import PropTypes from 'prop-types';
 
 const NetworkSelector = ({ network, setNetwork, customEndpoint, setCustomEndpoint, customEndpointError, setCustomEndpointError }) => {
     return (
@@ -45,3 +45,12 @@ const NetworkSelector = ({ network, setNetwork, customEndpoint, setCustomEndpoin
 };
 
 export default NetworkSelector; 
+
+NetworkSelector.propTypes = {
+  network: PropTypes.string.isRequired,
+  setNetwork: PropTypes.func.isRequired,
+  customEndpoint: PropTypes.string.isRequired,
+  setCustomEndpoint: PropTypes.func.isRequired,
+  customEndpointError: PropTypes.string.isRequired,
+  setCustomEndpointError: PropTypes.func.isRequired,
+};

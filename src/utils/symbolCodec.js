@@ -38,7 +38,7 @@ export function decodeSymbolCodeFromHex(scope) {
       }
       
       if (result.length > 0) return result;
-    } catch (error) {
+    } catch {
       // Fall through to return original
     }
   }

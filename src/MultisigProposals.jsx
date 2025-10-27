@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Form, Button, Alert, Spinner, Card, Badge } from 'react-bootstrap';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Button, Alert, Spinner, Card, Badge } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
 const MultisigProposals = () => {
@@ -12,8 +11,6 @@ const MultisigProposals = () => {
   const [customEndpointError, setCustomEndpointError] = useState('');
   const [activeProducers, setActiveProducers] = useState([]);
   const [currentSchedule, setCurrentSchedule] = useState([]);
-  const { proposalId } = useParams();
-  const navigate = useNavigate();
 
   const NETWORK_CONFIG = {
     mainnet: {
@@ -182,14 +179,6 @@ const MultisigProposals = () => {
     fetchActiveProducers();
     fetchProducerSchedule();
   }, [network, customEndpoint]);
-
-  const formatDate = (timestamp) => {
-    return new Date(timestamp + 'Z').toLocaleString();
-  };
-
-  const isProducerActive = (producer) => {
-    return activeProducers.includes(producer);
-  };
 
   const isProducerInSchedule = (producer) => {
     return currentSchedule.includes(producer);

@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import { Navbar, Container, Nav } from 'react-bootstrap';
 
@@ -55,3 +56,7 @@ const Layout = ({ children }) => {
 }
 
 export default Layout;
+
+Layout.propTypes = {
+  children: PropTypes.node.isRequired,
+};

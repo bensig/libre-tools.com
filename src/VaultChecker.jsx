@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Form, Button, Alert, Spinner, Table } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 

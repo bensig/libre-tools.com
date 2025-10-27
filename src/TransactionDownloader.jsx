@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Form, Button, Alert } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
@@ -19,7 +19,6 @@ export default function TransactionDownloader() {
   const [downloadData, setDownloadData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showJsonData, setShowJsonData] = useState(false);
   const [network, setNetwork] = useState('mainnet');
   const [customEndpoint, setCustomEndpoint] = useState('');
   const [customEndpointError, setCustomEndpointError] = useState('');
@@ -27,16 +26,6 @@ export default function TransactionDownloader() {
   const NETWORK_ENDPOINTS = {
     mainnet: 'https://lb.libre.org',
     testnet: 'https://testnet.libre.org',
-  };
-
-  const getApiEndpoint = () => {
-    if (network === 'custom') {
-      if (!customEndpoint) {
-        throw new Error('Custom endpoint is required');
-      }
-      return formatEndpoint(customEndpoint);
-    }
-    return NETWORK_ENDPOINTS[network];
   };
 
   const formatEndpoint = (url) => {
@@ -48,35 +37,31 @@ export default function TransactionDownloader() {
   };
 
   const fetchData = async (url, network, skip = 0, formattedData = []) => {
-    try {
-      const baseEndpoint = network === 'custom' 
-        ? formatEndpoint(customEndpoint)
-        : NETWORK_ENDPOINTS[network];
-      
-      console.log('Using endpoint:', baseEndpoint, 'Network:', network);
-      
-      const response = await fetch(`${baseEndpoint}${url}&skip=${skip * 1000}`);
-      const data = await response.json();
-      
-      const newFormattedData = formattedData.concat(
-        data.actions.map(action => ({
-          Date: action.timestamp,
-          Sender: action.act.data.from,
-          Recipient: action.act.data.to,
-          Quantity: action.act.data.quantity,
-          Memo: action.act.data.memo,
-          'Transaction ID': action.trx_id,
-        }))
-      );
+    const baseEndpoint = network === 'custom' 
+      ? formatEndpoint(customEndpoint)
+      : NETWORK_ENDPOINTS[network];
+    
+    console.log('Using endpoint:', baseEndpoint, 'Network:', network);
+    
+    const response = await fetch(`${baseEndpoint}${url}&skip=${skip * 1000}`);
+    const data = await response.json();
+    
+    const newFormattedData = formattedData.concat(
+      data.actions.map(action => ({
+        Date: action.timestamp,
+        Sender: action.act.data.from,
+        Recipient: action.act.data.to,
+        Quantity: action.act.data.quantity,
+        Memo: action.act.data.memo,
+        'Transaction ID': action.trx_id,
+      }))
+    );
 
-      if (data.actions.length === 1000) {
-        return fetchData(url, network, skip + 1, newFormattedData);
-      }
-
-      return newFormattedData;
-    } catch (error) {
-      throw error;
+    if (data.actions.length === 1000) {
+      return fetchData(url, network, skip + 1, newFormattedData);
     }
+
+    return newFormattedData;
   };
 
   const handleSubmit = async (e) => {

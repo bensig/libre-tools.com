@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Form, Button, Alert, Spinner } from 'react-bootstrap';
+import { useState } from 'react';
+import { Form, Button, Spinner } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
 
 const isValidHash = (hash) => {

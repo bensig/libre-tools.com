@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Form, Button, Table, Alert, Spinner, Modal, Button as ModalButton } from "react-bootstrap";
+import { useState, useEffect, useRef, Fragment } from "react";
+import { Form, Button, Alert, Spinner, Modal } from "react-bootstrap";
 import { WalletPluginBitcoinLibre } from "@libre-chain/wallet-plugin-bitcoin-libre";
 import { SessionKit } from "@wharfkit/session";
 import { WalletPluginAnchor } from "@wharfkit/wallet-plugin-anchor";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WebRenderer } from "@wharfkit/web-renderer";
-import { isCurrencyStatsTable, formatScopeDisplay, encodeSymbolCode } from './utils/symbolCodec';
+import { isCurrencyStatsTable, formatScopeDisplay } from './utils/symbolCodec';
 
 const LibreExplorer = () => {
   const { network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope } = useParams();
@@ -43,13 +43,11 @@ const LibreExplorer = () => {
   const [warningMessage, setWarningMessage] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [firstKey, setFirstKey] = useState(null);
   const [searchKey, setSearchKey] = useState('');
   const [searchField, setSearchField] = useState('');
   const [isSearchable, setIsSearchable] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [customEndpointError, setCustomEndpointError] = useState('');
-  const [showCustomEndpoint, setShowCustomEndpoint] = useState(false);
   const [view, setView] = useState('tables');
   const [actions, setActions] = useState([]);
   const [abiData, setAbiData] = useState(null);
@@ -66,16 +64,6 @@ const LibreExplorer = () => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [showCurlCommand, setShowCurlCommand] = useState(false);
 
-  const networks = {
-    mainnet: {
-      chainId: 'aca376f206b8fc25a6ed44dbdc66547c8af0a623a0a5f35e2c27c4c0aaea3808',
-      rpcEndpoint: 'https://lb.libre.org',
-    },
-    testnet: {
-      chainId: 'b64646740308df2ee06c6b72f34c0f7fa066d940e831f752db2006fcc2b78dee',
-      rpcEndpoint: 'https://testnet.libre.org',
-    }
-  };
 
   // Network config first
   const NETWORK_CONFIG = {
@@ -377,17 +365,6 @@ const LibreExplorer = () => {
     return cleanUrl;
   };
 
-  const isValidUrl = (url) => {
-    try {
-      // Format the URL first
-      const formattedUrl = formatEndpoint(url);
-      new URL(formattedUrl);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const fetchWithCorsHandling = async (path, options = {}) => {
     try {
       const apiEndpoint = getApiEndpoint();
@@ -489,7 +466,6 @@ const LibreExplorer = () => {
     setCurrentPage(0);
     setPreviousKeys([]);
     setNextKey(null);
-    setFirstKey(null);
     setWarningMessage(null);
     setError(null);
     setIsInitialLoad(true);
@@ -614,7 +590,7 @@ const LibreExplorer = () => {
     };
     
     // Find the first searchable field
-    const field = Object.keys(firstRow).find(key => searchableFields.hasOwnProperty(key));
+    const field = Object.keys(firstRow).find(key => Object.prototype.hasOwnProperty.call(searchableFields, key));
     
     return field ? { field, displayName: searchableFields[field] } : null;
   };
@@ -677,7 +653,6 @@ const LibreExplorer = () => {
       }
 
       if (isInitialLoad) {
-        setFirstKey(data.rows[0]?.account || null);
         setIsInitialLoad(false);
       }
 
@@ -768,46 +743,6 @@ const LibreExplorer = () => {
     setNextKey(null);
     setRows([]);
     fetchTableRows('forward');
-  };
-
-  // Add refresh function
-  const refreshCurrentView = async () => {
-    setIsLoading(true);
-    setWarningMessage(null);
-    setError(null);
-
-    try {
-      const params = {
-        code: accountName,
-        table: selectedTable,
-        scope: scope,
-        limit: limit,
-        json: true
-      };
-
-      const response = await fetchWithCorsHandling(
-        `/get_table_rows`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params),
-        }
-      );
-      
-      const data = await response.json();
-      
-      if (!data.rows || data.rows.length === 0) {
-        setRows([]);  // Just clear the rows without setting a warning
-      } else {
-        setRows(data.rows);
-        setNextKey(data.next_key);
-      }
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-      setError(error.message);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   // Update clear search function to explicitly fetch new data
@@ -990,24 +925,20 @@ const LibreExplorer = () => {
     return struct?.fields || [];
   };
 
-  const handleActionSelect = (action) => {
-    console.log('Selecting action:', action);
-    
-    // Store just the action name since that's what we need for lookup
-    setSelectedAction(action.name);
-    setActionParams({});
-    setParamErrors({});
-    setShowActionCommand(false);
-    
-    // Update URL with action name
-    let url = `/explorer/${network}`;
-    if (network === 'custom') {
-      url += `/${customEndpoint}`;
+  const validateField = (type, value) => {
+    if (!value) {
+      return '';
     }
-    url += `/${accountName}/actions/${action.name}`;
-    
-    console.log('Navigating to:', url);
-    navigate(url);
+
+    if (type.includes('json')) {
+      try {
+        JSON.parse(value);
+      } catch {
+        return 'Invalid JSON';
+      }
+    }
+
+    return '';
   };
 
   const handleParamChange = (field, value) => {
@@ -1051,26 +982,6 @@ const LibreExplorer = () => {
     }));
   };
 
-  // Add this helper function to format parameter values
-  const formatParamValue = (type, value) => {
-    if (!value) return value;
-    
-    if (type === 'params' || type.includes('json')) {
-      try {
-        // Parse the input JSON
-        const parsed = JSON.parse(value);
-        
-        // Simply stringify the parsed object, no additional wrapping
-        return JSON.stringify(parsed);
-      } catch (e) {
-        console.warn('Failed to parse JSON parameter:', e);
-        return value;
-      }
-    }
-    
-    return value;
-  };
-
   // Update handleLocalSubmit to properly handle parameters
   const handleLocalSubmit = async () => {
     if (!walletSession) {
@@ -1078,7 +989,7 @@ const LibreExplorer = () => {
         // Create a clean object with all non-empty parameters
         const cleanParams = Object.fromEntries(
           Object.entries(actionParams)
-            .filter(([_, value]) => value !== '')
+            .filter(([, value]) => value !== '')
         );
         
         // Create command with the parameters
@@ -1107,7 +1018,7 @@ const LibreExplorer = () => {
     
     // Add non-empty parameters to URL
     const nonEmptyParams = Object.entries(actionParams)
-      .filter(([_, value]) => value !== '')
+      .filter(([, value]) => value !== '')
       .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
     
     if (Object.keys(nonEmptyParams).length > 0) {
@@ -1213,41 +1124,6 @@ const LibreExplorer = () => {
     }
     
     console.log('Navigating to:', url);
-    navigate(url);
-  };
-
-  // Update handleActionParamChange to include parameters in URL
-  const handleActionParamChange = (paramName, value) => {
-    const newParams = {
-      ...actionParams,
-      [paramName]: value
-    };
-    
-    // Remove empty parameters
-    Object.keys(newParams).forEach(key => {
-      if (!newParams[key]) {
-        delete newParams[key];
-      }
-    });
-    
-    setActionParams(newParams);
-    
-    // Construct URL with parameters
-    let url = `/explorer/${network}`;
-    if (network === 'custom') {
-      url += `/${customEndpoint}`;
-    }
-    url += `/${accountName}/actions/${selectedAction}`;
-    
-    // Add parameters to URL if they exist
-    if (Object.keys(newParams).length > 0) {
-      const queryString = Object.entries(newParams)
-        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-        .join('&');
-      url += `?${queryString}`;
-    }
-    
-    console.log('Updating URL with params:', url);
     navigate(url);
   };
 
@@ -1540,7 +1416,7 @@ const LibreExplorer = () => {
               <div className="mt-2">
                 Try one of these examples:{' '}
                 {EXAMPLE_ACCOUNTS.map((account, index) => (
-                  <React.Fragment key={account}>
+                  <Fragment key={account}>
                     <a
                       href="#"
                       onClick={(e) => {
@@ -1555,7 +1431,7 @@ const LibreExplorer = () => {
                       {account}
                     </a>
                     {index < EXAMPLE_ACCOUNTS.length - 1 ? ', ' : ''}
-                  </React.Fragment>
+                  </Fragment>
                 ))}
               </div>
             </div>
@@ -1694,15 +1570,15 @@ const LibreExplorer = () => {
                                 <Button 
                                     variant="primary" 
                                     onClick={handleSearch}
-                                    disabled={isLoading}
+                                    disabled={isLoading || isSearching}
                                 >
-                                    Search
+                                    {isSearching ? 'Searching…' : 'Search'}
                                 </Button>
                                 {searchKey && (
                                     <Button 
                                         variant="secondary" 
                                         onClick={clearSearch}
-                                        disabled={isLoading}
+                                        disabled={isLoading || isSearching}
                                     >
                                         Clear
                                     </Button>
@@ -1724,22 +1600,19 @@ const LibreExplorer = () => {
                             </div>
                         ) : selectedTable && scope && rows.length === 0 && !error ? (
                             <Alert variant="warning" className="mb-3">
-                                <div>No data found in scope "{(() => {
-                                    const isCurrencyStats = isCurrencyStatsTable(abiData, selectedTable);
-                                    const displayScope = formatScopeDisplay(scope, isCurrencyStats);
-                                    return displayScope !== scope ? `${displayScope} (${scope})` : scope;
-                                })()}". You can verify using:</div>
+                                <div>
+                                  No data found in scope{' '}
+                                  <code>
+                                    {(() => {
+                                      const isCurrencyStats = isCurrencyStatsTable(abiData, selectedTable);
+                                      const displayScope = formatScopeDisplay(scope, isCurrencyStats);
+                                      return displayScope !== scope ? `${displayScope} (${scope})` : scope;
+                                    })()}
+                                  </code>
+                                  . You can verify using:
+                                </div>
                                 <code className="d-block mt-2 p-2 bg-light" style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                                    curl -X POST {getApiEndpoint()}/v1/chain/get_table_rows \{'\n'}
-                                    -H "Content-Type: application/json" \{'\n'}
-                                    -d '{JSON.stringify({
-                                        code: accountName,
-                                        table: selectedTable,
-                                        scope: scope,
-                                        limit: limit,
-                                        json: true,
-                                        reverse: true
-                                    }, null, 2)}'
+                                  {generateCurlCommand()}
                                 </code>
                             </Alert>
                         ) : rows.length > 0 ? (
@@ -1866,10 +1739,8 @@ const LibreExplorer = () => {
                         setParamErrors={setParamErrors}
                         setShowActionCommand={setShowActionCommand}
                         walletSession={walletSession}
-                        setActionCommand={setActionCommand}
                         actionCommand={actionCommand}
                         showActionCommand={showActionCommand}
-                        getApiEndpoint={getApiEndpoint}
                         copyToClipboard={copyToClipboard}
                         copySuccess={copySuccess}
                         setShowWalletModal={setShowWalletModal}
@@ -1957,10 +1828,8 @@ const ActionsView = ({
   setParamErrors,
   setShowActionCommand,
   walletSession,
-  setActionCommand,
   actionCommand,
   showActionCommand,
-  getApiEndpoint,
   copyToClipboard,
   copySuccess,
   setShowWalletModal

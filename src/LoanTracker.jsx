@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Form, Button, Table, Alert, Spinner, Dropdown } from "react-bootstrap";
+import { useState, useEffect, useRef } from "react";
+import { Button, Table, Alert, Spinner, Dropdown } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -104,6 +104,25 @@ const LoanTracker = () => {
     return formatNumber(amount.toFixed(2)) + ' USDT';
   };
 
+  const parseLoanDate = (value) => {
+    if (!value) return null;
+    const normalized = value.endsWith('Z') ? value : `${value}Z`;
+    const date = new Date(normalized);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const calculateDaysRemaining = (loan) => {
+    const startTime = parseLoanDate(loan.start_time);
+    const durationSec = loan?.terms?.loan_duration_sec;
+    if (!startTime || !durationSec) return 0;
+
+    const endTime = new Date(startTime.getTime() + durationSec * 1000);
+    const diffMs = endTime.getTime() - Date.now();
+    if (diffMs <= 0) return 0;
+
+    return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  };
+
   useEffect(() => {
     if (!initialized.current) {
       if (urlNetwork && (urlNetwork === 'mainnet' || urlNetwork === 'testnet')) {
@@ -121,10 +140,6 @@ const LoanTracker = () => {
       navigate(`/loans/${network}/${view}`);
     }
   }, [network, view, navigate]);
-
-  const handleNetworkChange = (newNetwork) => {
-    setNetwork(newNetwork);
-  };
 
   const fetchPoolStats = async () => {
     try {
@@ -729,16 +744,7 @@ const LoanTracker = () => {
                         const collateral = getCollateralBTC(loan);
                         const collateralValue = calculateCollateralValue(loan);
                         const ltv = calculateLoanLTV(loan);
-                        
-                        // Calculate days remaining
-                        const startTime = new Date(loan.start_time);
-                        const currentDate = new Date();
-                        
-                        // Calculate days elapsed since start
-                        const daysElapsed = Math.floor((currentDate - startTime) / (1000 * 60 * 60 * 24));
-                        
-                        // Calculate days remaining (30 days total - days elapsed)
-                        const daysRemaining = Math.max(0, 30 - daysElapsed);
+                        const daysRemaining = calculateDaysRemaining(loan);
                         
                         return (
                           <tr key={loan.id}>
