@@ -45,6 +45,7 @@ const LibreExplorer = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [searchKey, setSearchKey] = useState('');
   const [searchField, setSearchField] = useState('');
+  const [searchDisplayName, setSearchDisplayName] = useState('');
   const [isSearchable, setIsSearchable] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [customEndpointError, setCustomEndpointError] = useState('');
@@ -261,7 +262,7 @@ const LibreExplorer = () => {
         
         console.log('Setting initial scope:', scopeToUse);
         setScope(scopeToUse);
-        fetchTableRows('forward', scopeToUse, tableName);
+        fetchTableRows('forward', scopeToUse, tableName, false, { treatAsInitial: true });
       } catch (error) {
         console.error('Error fetching scopes:', error);
         setError(error.message);
@@ -280,7 +281,7 @@ const LibreExplorer = () => {
       setSelectedTable(urlItem);
       if (urlScope) {
         setScope(urlScope);
-        fetchTableRows('forward', urlScope, urlItem);
+        fetchTableRows('forward', urlScope, urlItem, false, { treatAsInitial: true });
       }
     }
   }, [urlView, urlItem, urlScope, accountName]);
@@ -471,6 +472,9 @@ const LibreExplorer = () => {
     setIsInitialLoad(true);
     setSearchKey('');
     setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
     if (!urlScope) {
       setScope(null);  // Only clear scope if not in URL
     }
@@ -541,7 +545,7 @@ const LibreExplorer = () => {
       setScope(scopeToUse);
 
       // Fetch rows with the selected scope
-      await fetchTableRows('forward', scopeToUse, table);
+      await fetchTableRows('forward', scopeToUse, table, false, { treatAsInitial: true });
     } catch (error) {
       console.error('Error in handleTableSelect:', error);
       setError(error.message);
@@ -570,38 +574,138 @@ const LibreExplorer = () => {
     setIsInitialLoad(true);
     setSearchKey('');
     setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
     
     fetchTables();
     updateURL();
   };
 
-  const determineSearchField = (rows) => {
-    if (!rows || rows.length === 0) return null;
-    
-    // Get the first row to examine its structure
-    const firstRow = rows[0];
-    
-    // Common searchable fields and their display names
-    const searchableFields = {
-      'account': 'account name',
-      'id': 'ID',
-      'from': 'sender',
-      'to': 'recipient'
-    };
-    
-    // Find the first searchable field
-    const field = Object.keys(firstRow).find(key => Object.prototype.hasOwnProperty.call(searchableFields, key));
-    
-    return field ? { field, displayName: searchableFields[field] } : null;
+  const getTableDefinition = (tableName) => {
+    if (!tableName || !abiData?.abi?.tables) {
+      return null;
+    }
+
+    return abiData.abi.tables.find((table) => table.name === tableName) || null;
   };
 
-  const fetchTableRows = async (direction = 'forward', scopeOverride = null, tableOverride = null, append = false) => {
+  const normalizeKeyType = (keyType, fieldName) => {
+    if (!keyType) {
+      if (fieldName === 'owner') {
+        return 'name';
+      }
+      return undefined;
+    }
+
+    const keyTypeMap = {
+      uint64: 'i64',
+      int64: 'i64',
+      name: 'name',
+      checksum256: 'sha256',
+      sha256: 'sha256',
+      float64: 'float64',
+      uint128: 'i128',
+      int128: 'i128',
+      uint256: 'i256',
+      int256: 'i256',
+    };
+
+    return keyTypeMap[keyType] || keyType;
+  };
+
+  const getIndexParams = (tableName, fieldName) => {
+    if (!tableName || !fieldName) {
+      return {};
+    }
+
+    const tableDefinition = getTableDefinition(tableName);
+    const fallbackForLoanVault = fieldName === 'owner' && tableName === 'vault' && accountName === 'loan'
+      ? { key_type: 'name' }
+      : null;
+
+    if (!tableDefinition) {
+      return fallbackForLoanVault || {};
+    }
+
+    const keyNames = tableDefinition.key_names || [];
+    const keyTypes = tableDefinition.key_types || [];
+    const matchIndex = keyNames.indexOf(fieldName);
+
+    if (matchIndex === -1) {
+      return fallbackForLoanVault || {};
+    }
+
+    const normalizedKeyType = normalizeKeyType(keyTypes[matchIndex], fieldName);
+
+    return {
+      index_position: matchIndex + 2,
+      ...(normalizedKeyType ? { key_type: normalizedKeyType } : {}),
+    };
+  };
+
+  const determineSearchField = (rows, tableName) => {
+    if (!rows || rows.length === 0) return null;
+
+    const firstRow = rows[0];
+
+    const baseFields = [
+      { field: 'owner', displayName: 'owner', requiresIndex: false },
+      { field: 'account', displayName: 'account name', requiresIndex: false },
+      { field: 'vault', displayName: 'vault', requiresIndex: false },
+      { field: 'id', displayName: 'ID', requiresIndex: false },
+      { field: 'from', displayName: 'sender', requiresIndex: false },
+      { field: 'to', displayName: 'recipient', requiresIndex: false },
+    ];
+
+    const tableDefinition = getTableDefinition(tableName);
+    const dynamicFields = [];
+
+    if (tableDefinition?.key_names?.length) {
+      tableDefinition.key_names.forEach((keyName) => {
+        if (!baseFields.some((field) => field.field === keyName)) {
+          dynamicFields.push({
+            field: keyName,
+            displayName: keyName,
+            requiresIndex: true,
+          });
+        }
+      });
+    }
+
+    const candidates = [...baseFields, ...dynamicFields];
+
+    for (const candidate of candidates) {
+      if (Object.prototype.hasOwnProperty.call(firstRow, candidate.field)) {
+        if (candidate.requiresIndex) {
+          const indexParams = getIndexParams(tableName, candidate.field);
+          if (!indexParams.index_position) {
+            continue;
+          }
+        }
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
+  const fetchTableRows = async (
+    direction = 'forward',
+    scopeOverride = null,
+    tableOverride = null,
+    append = false,
+    options = {}
+  ) => {
+    const { ignoreSearch = false, treatAsInitial = false } = options;
+
     // Show loading state immediately
     setIsLoading(true);
     setError(null);  // Clear any previous errors
     
     const currentScope = scopeOverride || scope;
     const currentTable = tableOverride || selectedTable;
+    const effectiveInitialLoad = treatAsInitial || isInitialLoad;
     
     if (!currentTable || !currentScope) {
       setIsLoading(false);
@@ -619,10 +723,15 @@ const LibreExplorer = () => {
       };
 
       // Handle search parameters if searching
-      if (searchKey && searchField) {
+      const shouldApplySearch = !ignoreSearch && searchKey && searchField;
+
+      if (shouldApplySearch) {
         params.lower_bound = searchKey;
         params.upper_bound = searchKey;
-      } else if (isInitialLoad) {
+
+        const indexParams = getIndexParams(currentTable, searchField);
+        Object.assign(params, indexParams);
+      } else if (effectiveInitialLoad) {
         // Don't add any bounds for initial load
       } else if (direction === 'forward' && nextKey) {
         params.upper_bound = nextKey;
@@ -652,12 +761,12 @@ const LibreExplorer = () => {
         return;
       }
 
-      if (isInitialLoad) {
+      if (effectiveInitialLoad) {
         setIsInitialLoad(false);
       }
 
       // Update page counter only when not on initial load
-      if (!append && !isInitialLoad) {
+      if (!append && !effectiveInitialLoad) {
         if (direction === 'forward') {
           setCurrentPage(prev => prev + 1);
         } else if (direction === 'backward' && currentPage > 0) {
@@ -681,11 +790,16 @@ const LibreExplorer = () => {
       }
 
       // Check if table is searchable after getting first results
-      if (isInitialLoad && data.rows.length > 0) {
-        const searchInfo = determineSearchField(data.rows);
-        setIsSearchable(!!searchInfo);
-        if (searchInfo) {
+      if (effectiveInitialLoad && data.rows.length > 0) {
+        const searchInfo = determineSearchField(data.rows, currentTable);
+        const hasSearch = !!searchInfo;
+        setIsSearchable(hasSearch);
+        if (hasSearch) {
           setSearchField(searchInfo.field);
+          setSearchDisplayName(searchInfo.displayName);
+        } else {
+          setSearchField('');
+          setSearchDisplayName('');
         }
       }
     } catch (error) {
@@ -718,7 +832,7 @@ const LibreExplorer = () => {
     setScope(customScopeInput);
     setRows([]);
     setError(null);
-    await fetchTableRows('forward', customScopeInput, selectedTable);
+    await fetchTableRows('forward', customScopeInput, selectedTable, false, { treatAsInitial: true });
     setCustomScopeInput('');
   };
 
@@ -728,7 +842,16 @@ const LibreExplorer = () => {
     setWarningMessage(null);
     setError(null);
     setRows([]);
-    fetchTableRows('forward', newScope, selectedTable);
+    setSearchKey('');
+    setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
+    setIsInitialLoad(true);
+    setCurrentPage(0);
+    setPreviousKeys([]);
+    setNextKey(null);
+    fetchTableRows('forward', newScope, selectedTable, false, { treatAsInitial: true });
   };
 
   const handleSearch = (e) => {
@@ -758,31 +881,10 @@ const LibreExplorer = () => {
     setRows([]);
     
     try {
-      const params = {
-        code: accountName,
-        table: selectedTable,
-        scope: scope,
-        limit: limit,
-        json: true
-      };
-      
-      const response = await fetchWithCorsHandling(
-        `/get_table_rows`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params),
-        }
-      );
-      
-      const data = await response.json();
-      
-      if (!data.rows || data.rows.length === 0) {
-        setRows([]);  // Just clear the rows without setting a warning
-      } else {
-        setRows(data.rows);
-        setNextKey(data.next_key);
-      }
+      await fetchTableRows('forward', scope, selectedTable, false, {
+        ignoreSearch: true,
+        treatAsInitial: true,
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
       setError(error.message);
@@ -841,6 +943,9 @@ const LibreExplorer = () => {
     setIsInitialLoad(true);
     setSearchKey('');
     setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
     setTables([]);
     setActions([]);
     
@@ -1104,6 +1209,11 @@ const LibreExplorer = () => {
     setCurrentPage(0);
     setPreviousKeys([]);
     setNextKey(null);
+    setSearchKey('');
+    setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
     // Clear action-related state too
     setSelectedAction(null);
     setActionParams({});
@@ -1185,6 +1295,9 @@ const LibreExplorer = () => {
     setIsInitialLoad(true);
     setSearchKey('');
     setIsSearching(false);
+    setIsSearchable(false);
+    setSearchField('');
+    setSearchDisplayName('');
     // Disconnect wallet when changing networks
     if (walletSession) {
       disconnectWallet();
@@ -1337,12 +1450,16 @@ const LibreExplorer = () => {
       table: selectedTable,
       scope: scope,
       limit: limit,
-      json: true
+      json: true,
+      reverse: true
     };
 
     if (searchKey && searchField) {
       params.lower_bound = searchKey;
       params.upper_bound = searchKey;
+
+      const indexParams = getIndexParams(selectedTable, searchField);
+      Object.assign(params, indexParams);
     }
 
     return `curl -X POST ${getApiEndpoint()}/v1/chain/get_table_rows -d '${JSON.stringify(params, null, 2)}'`;
@@ -1557,7 +1674,7 @@ const LibreExplorer = () => {
                             <div className="d-flex gap-2">
                                 <Form.Control
                                     type="text"
-                                    placeholder={`search by ${searchField}`}
+                                    placeholder={`search by ${searchDisplayName || searchField}`}
                                     value={searchKey}
                                     onChange={handleSearchKeyChange}
                                     onKeyPress={(e) => {
@@ -1585,7 +1702,7 @@ const LibreExplorer = () => {
                                 )}
                             </div>
                             <Form.Text className="text-muted">
-                                Enter exact {searchField} to search
+                                Enter exact {searchDisplayName || searchField} to search
                             </Form.Text>
                         </div>
                     )}
