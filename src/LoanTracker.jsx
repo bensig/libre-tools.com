@@ -558,8 +558,16 @@ const LoanTracker = () => {
           <h2 className="mb-4">Loan Overview</h2>
           
           <div className="alert alert-info mb-4">
-            <i className="bi bi-info-circle me-2"></i>
-            Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.
+            <div className="d-flex">
+              <i className="bi bi-info-circle me-2 mt-1"></i>
+              <div>
+                <div>Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.</div>
+                <div className="mt-2 px-3 py-2 bg-white text-info border border-info rounded">
+                  <strong className="me-1">Quick tip:</strong>
+                  Click on any account or collateral balance below to see the on-chain collateral for that loan in its own dedicated address.
+                </div>
+              </div>
+            </div>
           </div>
           
           <div style={{ maxWidth: '300px' }} className="mb-4">

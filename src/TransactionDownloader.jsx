@@ -229,7 +229,13 @@ export default function TransactionDownloader() {
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
-            Download account history for any Libre account. Filter by date range and specific contract actions.
+            <div>
+              Download account history for any Libre account. Filter by date range and specific contract actions.
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Apply the date or contract filters before submitting to keep your CSV export focused on the transactions you care about.
+              </div>
+            </div>
           </div>
 
           <Form onSubmit={handleSubmit}>

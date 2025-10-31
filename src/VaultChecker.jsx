@@ -359,7 +359,13 @@ const VaultChecker = () => {
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
-            Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.
+            <div>
+              Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Vault names end in `.loan`—paste one here to jump straight to its collateral and loan status overview.
+              </div>
+            </div>
           </div>
 
           <div style={{ maxWidth: '300px' }} className="mb-4">
@@ -394,6 +400,7 @@ const VaultChecker = () => {
                         value={searchInput}
                         onChange={handleSearchInputChange}
                         placeholder="Enter account name or vault name (ends with .loan)"
+                        autoFocus
                       />
                       <Form.Text className="text-muted">
                         Enter a Libre account name (e.g. nobi) or a vault name (e.g. 2kcv5ga.loan)

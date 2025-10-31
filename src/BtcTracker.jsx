@@ -351,6 +351,10 @@ const BtcTracker = () => {
             <i className="bi bi-info-circle me-2"></i>
             <div>
               Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks.
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Paste either a Libre or Bitcoin transaction hash—the tracker checks both chains automatically and links the matching transfer when found.
+              </div>
             </div>
           </div>
 

@@ -1551,6 +1551,10 @@ const LibreExplorer = () => {
                   </Fragment>
                 ))}
               </div>
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Use the Tables and Actions toggle above to jump between on-chain data and ABI actions without leaving the page.
+              </div>
             </div>
           </div>
 

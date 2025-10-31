@@ -250,8 +250,14 @@ const MultisigProposals = () => {
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
-            Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations. 
-            These often include ratification of DAO proposals - see <a href="https://defi.libre.org/dao" target="_blank" rel="noopener noreferrer" className="alert-link">defi.libre.org/dao</a> for more information.
+            <div>
+              Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations. 
+              These often include ratification of DAO proposals - see <a href="https://defi.libre.org/dao" target="_blank" rel="noopener noreferrer" className="alert-link">defi.libre.org/dao</a> for more information.
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                On mainnet, launch the msig.app button to review and sign proposals directly; otherwise open the bloks.io view for a read-only snapshot.
+              </div>
+            </div>
           </div>
           
           <div className="mb-4" style={{ maxWidth: '300px' }}>

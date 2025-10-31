@@ -5,7 +5,7 @@ const Home = () => {
     {
       title: 'Loan Overview',
       path: '/loans',
-      description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations.'
+      description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations. Click on any account or collateral balance below to see the on-chain collateral for that loan in its own dedicated address.'
     },
     {
       title: 'Contract Explorer',
@@ -47,15 +47,21 @@ const Home = () => {
           
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
-            Open-source tools provided by Quantum validator on Libre - please{' '}
-            <a 
-              href="https://defi.libre.org/validators" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="alert-link"
-            >
-              vote for quantum
-            </a>
+            <div>
+              Open-source tools provided by Quantum validator on Libre - please{' '}
+              <a 
+                href="https://defi.libre.org/validators" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="alert-link"
+              >
+                vote for quantum
+              </a>
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Command/Ctrl-click any tool below to open it in a new tab while keeping this dashboard handy.
+              </div>
+            </div>
           </div>
 
           <div className="list-group">

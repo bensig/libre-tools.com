@@ -212,6 +212,10 @@ function SeedGenerator() {
             <i className="bi bi-info-circle me-2"></i>
             <div>
               Generate a secure seed phrase by moving your mouse within the entropy collection area below or typing on your keyboard.
+              <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
+                <strong className="me-1">Quick tip:</strong>
+                Mix mouse, keyboard, and touch input while the collector runs to build entropy faster before revealing your seed words.
+              </div>
             </div>
           </div>
 
