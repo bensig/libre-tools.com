@@ -25,7 +25,8 @@ const LoanTracker = () => {
   const [poolStats, setPoolStats] = useState({
     total: 0,
     available: 0,
-    utilized: 0
+    utilized: 0,
+    pools: []
   });
   const [vaultAccounts, setVaultAccounts] = useState({});
   const [vaultBalances, setVaultBalances] = useState({});
@@ -141,72 +142,43 @@ const LoanTracker = () => {
     }
   }, [network, view, navigate]);
 
+  const parseAssetAmount = (asset) => {
+    if (!asset) return 0;
+    if (typeof asset === 'number') return asset;
+    const [amount] = asset.split(' ');
+    return parseFloat(amount) || 0;
+  };
+
   const fetchPoolStats = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+    const poolRows = await fetchAllTableRows({
+      code: 'loan',
+      table: 'poolstats',
+      scope: 'loan',
+      limit: 1000,
+      json: true
+    });
 
-      // Get available balance directly from currency balance
-      const balanceResponse = await fetch(getApiEndpoint() + '/v1/chain/get_currency_balance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'usdt.libre',
-          account: 'loan',
-          symbol: 'USDT'
-        })
-      });
+    const pools = poolRows.map((row) => ({
+      pool_id: row.pool_id,
+      available: parseAssetAmount(row.available),
+      outstanding: parseAssetAmount(row.outstanding_amount),
+      deposit: parseAssetAmount(row.deposit),
+      interest_accrued: parseAssetAmount(row.interest_accrued),
+      redemption_proceeds: parseAssetAmount(row.redemption_proceeds)
+    }));
 
-      if (!balanceResponse.ok) {
-        throw new Error('Failed to fetch balance data');
-      }
+    const totals = pools.reduce((acc, pool) => {
+      acc.available += pool.available;
+      acc.outstanding += pool.outstanding;
+      return acc;
+    }, { available: 0, outstanding: 0 });
 
-      const balanceData = await balanceResponse.json();
-      const availableAmount = parseFloat(balanceData[0]?.split(' ')[0] || 0);
-
-      // Get global stats for outstanding amount (utilized)
-      const globalStatsResponse = await fetch(getApiEndpoint() + '/v1/chain/get_table_rows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'globalstats',
-          scope: 'loan',
-          limit: 1,
-          json: true
-        })
-      });
-
-      if (!globalStatsResponse.ok) {
-        throw new Error('Failed to fetch global stats');
-      }
-
-      const globalStatsData = await globalStatsResponse.json();
-      
-      // Get utilized amount from outstanding_amount in globalstats
-      const utilizedAmount = parseFloat(
-        globalStatsData.rows[0]?.outstanding_amount?.split(' ')[0] || 0
-      );
-      
-      // Calculate total as available + utilized
-      const totalAmount = availableAmount + utilizedAmount;
-      
-      // Store values in state
-      setPoolStats({
-        total: totalAmount,
-        available: availableAmount,
-        utilized: utilizedAmount
-      });
-    } catch (error) {
-      console.error('Error fetching pool stats:', error);
-      setError('Failed to fetch pool statistics. ' + error.message);
-    } finally {
-      setIsLoading(false);
-    }
+    setPoolStats({
+      total: totals.available + totals.outstanding,
+      available: totals.available,
+      utilized: totals.outstanding,
+      pools
+    });
   };
 
   const fetchLoans = async (scope) => {
