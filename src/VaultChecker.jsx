@@ -107,12 +107,15 @@ const VaultChecker = () => {
 
       // Use lower_bound and upper_bound for efficient lookup
       if (!isVault) {
-        // Searching by account name (owner field) - owner IS the primary key, so we can use bounds
+        // Searching by account name (owner field) - use primary index (index_position 1, default)
         requestBody.lower_bound = searchInput;
         requestBody.upper_bound = searchInput;
       } else {
-        // Searching by vault name - vault is NOT the primary key, need to scan all rows
-        requestBody.limit = 10000;
+        // Searching by vault name - use secondary index on vault field (index_position 2)
+        requestBody.index_position = 2;
+        requestBody.key_type = 'name';
+        requestBody.lower_bound = searchInput;
+        requestBody.upper_bound = searchInput;
       }
 
       const vaultResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
