@@ -107,11 +107,10 @@ const VaultChecker = () => {
 
       // Use lower_bound and upper_bound for efficient lookup
       if (!isVault) {
-        // Searching by account name (owner field)
-        requestBody.lower_bound = searchInput;
-        requestBody.upper_bound = searchInput;
+        // Searching by account name (owner field) - need to scan all since owner is not the primary key
+        requestBody.limit = 10000;
       } else {
-        // Searching by vault name - need to scan since vault might be secondary index
+        // Searching by vault name - need to scan to find the vault
         requestBody.limit = 10000;
       }
 
