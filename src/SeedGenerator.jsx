@@ -34,9 +34,14 @@ function SeedGenerator() {
 
   const collectTouchEntropy = (event) => {
     if (isCollecting && entropy.length < requiredEntropyPoints) {
+      // Don't prevent default on button clicks
+      if (event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+        return;
+      }
+
       // Prevent scrolling while collecting entropy
       event.preventDefault();
-      
+
       // Collect entropy from all touch points
       Array.from(event.touches).forEach(touch => {
         setEntropy(prev => [...prev, {
@@ -175,18 +180,20 @@ function SeedGenerator() {
   };
 
   useEffect(() => {
-    // Add keyboard and touch event listeners when collecting
-    document.addEventListener('keydown', collectKeyboardEntropy);
-    document.addEventListener('touchmove', collectTouchEntropy, { passive: false });
-    document.addEventListener('touchstart', collectTouchEntropy, { passive: false });
-    
-    // Cleanup function to remove event listeners
-    return () => {
-      document.removeEventListener('keydown', collectKeyboardEntropy);
-      document.removeEventListener('touchmove', collectTouchEntropy);
-      document.removeEventListener('touchstart', collectTouchEntropy);
-    };
-  }, [isCollecting]); // Re-run effect when isCollecting changes
+    // Only add event listeners when actively collecting and haven't reached the goal
+    if (isCollecting && entropy.length < requiredEntropyPoints) {
+      document.addEventListener('keydown', collectKeyboardEntropy);
+      document.addEventListener('touchmove', collectTouchEntropy, { passive: false });
+      document.addEventListener('touchstart', collectTouchEntropy, { passive: false });
+
+      // Cleanup function to remove event listeners
+      return () => {
+        document.removeEventListener('keydown', collectKeyboardEntropy);
+        document.removeEventListener('touchmove', collectTouchEntropy);
+        document.removeEventListener('touchstart', collectTouchEntropy);
+      };
+    }
+  }, [isCollecting, entropy.length, requiredEntropyPoints]); // Re-run effect when collection state changes
 
   useEffect(() => {
     return () => {

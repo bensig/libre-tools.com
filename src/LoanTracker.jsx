@@ -486,13 +486,13 @@ const LoanTracker = () => {
 
   const renderStatus = (status) => {
     const statusMap = {
-      0: { label: 'In Progress', variant: 'primary' },
-      1: { label: 'Warning', variant: 'warning' },
-      2: { label: 'At Risk', variant: 'danger' },
-      3: { label: 'Liquidating', variant: 'danger' },
-      4: { label: 'Liquidated', variant: 'secondary' },
-      5: { label: 'Repaid', variant: 'success' },
-      6: { label: 'Canceled', variant: 'secondary' }
+      0: { label: 'IN PROGRESS', variant: 'primary' },
+      1: { label: 'WARNING', variant: 'warning' },
+      2: { label: 'AT RISK', variant: 'danger' },
+      3: { label: 'LIQUIDATING', variant: 'danger' },
+      4: { label: 'LIQUIDATED', variant: 'secondary' },
+      5: { label: 'REPAID', variant: 'success' },
+      6: { label: 'CANCELED', variant: 'secondary' }
     };
 
     const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
@@ -501,12 +501,12 @@ const LoanTracker = () => {
 
   const renderLiquidationStatus = (status) => {
     const statusMap = {
-      0: { label: 'At Risk', variant: 'warning' },
-      1: { label: 'Resolved', variant: 'success' },
-      2: { label: 'Processing', variant: 'primary' },
-      3: { label: 'Processing', variant: 'primary' },
-      4: { label: 'Penalizing', variant: 'danger' },
-      5: { label: 'Liquidated', variant: 'secondary' }
+      0: { label: 'AT RISK', variant: 'warning' },
+      1: { label: 'RESOLVED', variant: 'success' },
+      2: { label: 'GENERATING ADDRESS', variant: 'primary' },
+      3: { label: 'PEGGING OUT', variant: 'primary' },
+      4: { label: 'PENALIZING', variant: 'danger' },
+      5: { label: 'LIQUIDATED', variant: 'secondary' }
     };
 
     const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
