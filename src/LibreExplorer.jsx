@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Form, Button, Alert, Spinner, Modal } from "react-bootstrap";
+import { Form, Button, Alert, Spinner, Modal, Badge } from "react-bootstrap";
 import { WalletPluginBitcoinLibre } from "@libre-chain/wallet-plugin-bitcoin-libre";
 import { SessionKit } from "@wharfkit/session";
 import { WalletPluginAnchor } from "@wharfkit/wallet-plugin-anchor";
@@ -815,14 +815,71 @@ const LibreExplorer = () => {
   // Helper function to format cell values
   const formatCellValue = (value) => {
     if (value === null || value === undefined) return '';
-    
+
     // If it's an object or array, stringify it with proper formatting
     if (typeof value === 'object') {
       return JSON.stringify(value, null, 2);
     }
-    
+
     // For simple values, just convert to string
     return String(value);
+  };
+
+  // Render status badge for loan table
+  const renderLoanStatusBadge = (status) => {
+    const statusMap = {
+      0: { label: 'IN PROGRESS', variant: 'primary' },
+      1: { label: 'WARNING', variant: 'warning' },
+      2: { label: 'AT RISK', variant: 'danger' },
+      3: { label: 'LIQUIDATING', variant: 'danger' },
+      4: { label: 'LIQUIDATED', variant: 'secondary' },
+      5: { label: 'REPAID', variant: 'success' },
+      6: { label: 'CANCELED', variant: 'secondary' }
+    };
+
+    const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
+    return <Badge bg={variant}>{label}</Badge>;
+  };
+
+  // Render status badge for liquidation table
+  const renderLiquidationStatusBadge = (status) => {
+    const statusMap = {
+      0: { label: 'AT RISK', variant: 'warning' },
+      1: { label: 'RESOLVED', variant: 'success' },
+      2: { label: 'GENERATING ADDRESS', variant: 'primary' },
+      3: { label: 'PEGGING OUT', variant: 'primary' },
+      4: { label: 'PENALIZING', variant: 'danger' },
+      5: { label: 'LIQUIDATED', variant: 'secondary' }
+    };
+
+    const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
+    return <Badge bg={variant}>{label}</Badge>;
+  };
+
+  // Helper function to determine if we should render a status badge
+  const shouldRenderStatusBadge = (columnName, tableName, contractName) => {
+    if (contractName !== 'loan') return false;
+    if (columnName !== 'status') return false;
+    if (tableName !== 'loan' && tableName !== 'liquidation') return false;
+    return true;
+  };
+
+  // Helper function to render cell value with special handling for status columns
+  const renderCellValue = (columnName, value, tableName) => {
+    // Check if this is a status column in the loan contract
+    if (shouldRenderStatusBadge(columnName, tableName, accountName)) {
+      const statusNum = typeof value === 'number' ? value : parseInt(value);
+      if (!isNaN(statusNum)) {
+        if (tableName === 'liquidation') {
+          return renderLiquidationStatusBadge(statusNum);
+        } else {
+          return renderLoanStatusBadge(statusNum);
+        }
+      }
+    }
+
+    // Default formatting for non-status columns
+    return formatCellValue(value);
   };
 
   const handleCustomScopeSubmit = async () => {
@@ -1748,15 +1805,18 @@ const LibreExplorer = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {rows.map((row, index) => (
-                                                <tr key={index}>
-                                                    {Object.values(row).map((value, idx) => (
-                                                        <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
-                                                            {formatCellValue(value)}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
+                                            {rows.map((row, index) => {
+                                                const columnNames = Object.keys(row);
+                                                return (
+                                                    <tr key={index}>
+                                                        {Object.entries(row).map(([columnName, value], idx) => (
+                                                            <td key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                                                                {renderCellValue(columnName, value, selectedTable)}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Button, Table, Alert, Spinner, Dropdown } from "react-bootstrap";
+import { Table, Alert, Spinner, Dropdown, Badge } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -496,7 +496,7 @@ const LoanTracker = () => {
     };
 
     const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
-    return <Button size="sm" variant={variant} disabled>{label}</Button>;
+    return <Badge bg={variant}>{label}</Badge>;
   };
 
   const renderLiquidationStatus = (status) => {
@@ -510,7 +510,7 @@ const LoanTracker = () => {
     };
 
     const { label, variant } = statusMap[status] || { label: 'Unknown', variant: 'secondary' };
-    return <Button size="sm" variant={variant} disabled>{label}</Button>;
+    return <Badge bg={variant}>{label}</Badge>;
   };
 
   const renderLiquidationsTable = (liquidations) => (
