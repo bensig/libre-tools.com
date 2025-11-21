@@ -114,7 +114,7 @@ const MultisigProposals = () => {
 
   const fetchProposalDetails = async (scope) => {
     try {
-      // Fetch proposal
+      // Fetch all proposals for this scope
       const proposalResponse = await fetchWithTimeout(`${getApiEndpoint()}/v1/chain/get_table_rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,12 +123,12 @@ const MultisigProposals = () => {
           code: 'eosio.msig',
           scope: scope,
           table: 'proposal',
-          limit: 1
+          limit: 100
         })
       });
       const proposalData = await proposalResponse.json();
-      
-      // Fetch approvals
+
+      // Fetch all approvals for this scope
       const approvalsResponse = await fetchWithTimeout(`${getApiEndpoint()}/v1/chain/get_table_rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,24 +137,24 @@ const MultisigProposals = () => {
           code: 'eosio.msig',
           scope: scope,
           table: 'approvals2',
-          limit: 1
+          limit: 100
         })
       });
       const approvalsData = await approvalsResponse.json();
 
-      if (proposalData.rows.length > 0) {
-        const proposal = proposalData.rows[0];
-        const approvals = approvalsData.rows[0] || { requested_approvals: [], provided_approvals: [] };
+      // Map proposals to their approvals
+      return proposalData.rows.map(proposal => {
+        const approvals = approvalsData.rows.find(a => a.proposal_name === proposal.proposal_name) ||
+                         { requested_approvals: [], provided_approvals: [] };
         return {
           scope,
           ...proposal,
           ...approvals
         };
-      }
-      return null;
+      });
     } catch (error) {
       console.error(`Error fetching proposal details for scope ${scope}:`, error);
-      return null;
+      return [];
     }
   };
 
@@ -165,8 +165,9 @@ const MultisigProposals = () => {
       const scopes = await fetchProposalScopes();
       const proposalPromises = scopes.map(scope => fetchProposalDetails(scope));
       const proposalResults = await Promise.all(proposalPromises);
-      const validProposals = proposalResults.filter(p => p !== null);
-      setProposals(validProposals);
+      // Flatten the array of arrays into a single array of proposals
+      const allProposals = proposalResults.flat();
+      setProposals(allProposals);
     } catch (err) {
       setError(err.message);
     } finally {
