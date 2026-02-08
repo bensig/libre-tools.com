@@ -87,6 +87,27 @@ const DexAnalysis = () => {
     return new Intl.NumberFormat("en-US").format(value);
   };
 
+  const formatUSD = (value) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const getMidPrice = (orderList) => {
+    const bids = orderList.filter((o) => o.type === "buy");
+    const asks = orderList.filter((o) => o.type === "sell");
+
+    if (bids.length === 0 || asks.length === 0) return null;
+
+    const highestBid = Math.max(...bids.map((o) => parseFloat(o.price)));
+    const lowestAsk = Math.min(...asks.map((o) => parseFloat(o.price)));
+
+    return (highestBid + lowestAsk) / 2;
+  };
+
   const fetchOrders = async () => {
     setIsLoading(true);
     setError(null);
@@ -181,6 +202,31 @@ const DexAnalysis = () => {
   const stats = getMarketStats(orderList, pair);
   const config = PAIR_CONFIG[pair];
 
+  // Calculate USD values for depths
+  const btcUsdPrice = getMidPrice(orders.btcusdt);
+  const librebtcMidPrice = getMidPrice(orders.librebtc);
+
+  let bidDepthUSD = null;
+  let askDepthUSD = null;
+
+  if (pair === "btcusdt") {
+    // Bid depth is already in USDT
+    bidDepthUSD = stats.bidDepth;
+    // Ask depth is in BTC, multiply by BTC price
+    if (btcUsdPrice) {
+      askDepthUSD = stats.askDepth * btcUsdPrice;
+    }
+  } else if (pair === "librebtc") {
+    // Bid depth is in BTC, multiply by BTC price
+    if (btcUsdPrice) {
+      bidDepthUSD = stats.bidDepth * btcUsdPrice;
+    }
+    // Ask depth is in LIBRE, multiply by LIBRE/BTC price then by BTC price
+    if (btcUsdPrice && librebtcMidPrice) {
+      askDepthUSD = stats.askDepth * librebtcMidPrice * btcUsdPrice;
+    }
+  }
+
   const sortedBids = [...stats.bids].sort(
     (a, b) => parseFloat(b.price) - parseFloat(a.price)
   );
@@ -244,11 +290,16 @@ const DexAnalysis = () => {
                       <h5 className="card-title">
                         Bid Depth ({config.quoteSymbol})
                       </h5>
-                      <p className="card-text h3 text-success">
+                      <p className="card-text h3 text-success mb-1">
                         {formatNumber(
                           stats.bidDepth.toFixed(config.quoteDecimals)
                         )}
                       </p>
+                      {bidDepthUSD !== null && (
+                        <p className="card-text text-muted small mb-0">
+                          {formatUSD(bidDepthUSD)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -258,11 +309,16 @@ const DexAnalysis = () => {
                       <h5 className="card-title">
                         Ask Depth ({config.baseSymbol})
                       </h5>
-                      <p className="card-text h3 text-danger">
+                      <p className="card-text h3 text-danger mb-1">
                         {formatNumber(
                           stats.askDepth.toFixed(config.baseDecimals)
                         )}
                       </p>
+                      {askDepthUSD !== null && (
+                        <p className="card-text text-muted small mb-0">
+                          {formatUSD(askDepthUSD)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
