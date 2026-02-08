@@ -8,6 +8,7 @@ import SeedGenerator from './SeedGenerator';
 import MultisigProposals from './MultisigProposals';
 import LoanTracker from './LoanTracker';
 import VaultChecker from './VaultChecker';
+import DexAnalysis from './DexAnalysis';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
                 <Route path="/loans/:network/liquidations" element={<LoanTracker />} />
                 <Route path="/loans/:network/:view" element={<LoanTracker />} />
                 <Route path="/vault-checker" element={<VaultChecker />} />
+                <Route path="/dex-analysis" element={<DexAnalysis />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
