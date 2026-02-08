@@ -277,15 +277,16 @@ const DexAnalysis = () => {
               {/* Summary Cards */}
               <div className="row mb-4">
                 <div className="col-md-4">
-                  <div className="card">
+                  <div className="card h-100">
                     <div className="card-body">
                       <h5 className="card-title">Total Orders</h5>
-                      <p className="card-text h3">{orderList.length}</p>
+                      <p className="card-text h3 mb-1">{orderList.length}</p>
+                      <p className="card-text text-muted small mb-0">&nbsp;</p>
                     </div>
                   </div>
                 </div>
                 <div className="col-md-4">
-                  <div className="card">
+                  <div className="card h-100">
                     <div className="card-body">
                       <h5 className="card-title">
                         Bid Depth ({config.quoteSymbol})
@@ -304,7 +305,7 @@ const DexAnalysis = () => {
                   </div>
                 </div>
                 <div className="col-md-4">
-                  <div className="card">
+                  <div className="card h-100">
                     <div className="card-body">
                       <h5 className="card-title">
                         Ask Depth ({config.baseSymbol})
