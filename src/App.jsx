@@ -35,6 +35,7 @@ function App() {
                 <Route path="/loans/:network/:view" element={<LoanTracker />} />
                 <Route path="/vault-checker" element={<VaultChecker />} />
                 <Route path="/dex-analysis" element={<DexAnalysis />} />
+                <Route path="/dex-analysis/:pair" element={<DexAnalysis />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>

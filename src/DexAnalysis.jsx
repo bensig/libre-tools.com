@@ -1,13 +1,50 @@
-import { useState, useEffect } from "react";
-import { Table, Alert, Spinner, Tabs, Tab, Card, Badge } from "react-bootstrap";
+import { useState, useEffect, useRef } from "react";
+import { Table, Alert, Spinner, Dropdown, Badge } from "react-bootstrap";
+import { useParams, useNavigate } from "react-router-dom";
 
 const DexAnalysis = () => {
+  const { pair: urlPair } = useParams();
+  const navigate = useNavigate();
+  const initialized = useRef(false);
+
   const API_ENDPOINT = "https://lb.libre.org";
 
-  const [activeTab, setActiveTab] = useState("btcusdt");
+  const [pair, setPair] = useState("btcusdt");
   const [orders, setOrders] = useState({ btcusdt: [], librebtc: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const PAIR_CONFIG = {
+    btcusdt: {
+      label: "BTC/USDT",
+      baseSymbol: "BTC",
+      quoteSymbol: "USDT",
+      baseDecimals: 8,
+      quoteDecimals: 2,
+      priceDecimals: 2,
+    },
+    librebtc: {
+      label: "LIBRE/BTC",
+      baseSymbol: "LIBRE",
+      quoteSymbol: "BTC",
+      baseDecimals: 4,
+      quoteDecimals: 8,
+      priceDecimals: 10,
+    },
+  };
+
+  useEffect(() => {
+    if (!initialized.current) {
+      if (urlPair && (urlPair === "btcusdt" || urlPair === "librebtc")) {
+        setPair(urlPair);
+      }
+      initialized.current = true;
+    }
+  }, [urlPair]);
+
+  useEffect(() => {
+    navigate(`/dex-analysis/${pair}`);
+  }, [pair, navigate]);
 
   const fetchAllTableRows = async (requestBody) => {
     const rows = [];
@@ -46,10 +83,8 @@ const DexAnalysis = () => {
     return parseFloat(amount) || 0;
   };
 
-  const parseAssetSymbol = (asset) => {
-    if (!asset) return "";
-    const parts = asset.split(" ");
-    return parts[1] || "";
+  const formatNumber = (value) => {
+    return new Intl.NumberFormat("en-US").format(value);
   };
 
   const fetchOrders = async () => {
@@ -89,35 +124,18 @@ const DexAnalysis = () => {
     fetchOrders();
   }, []);
 
-  const formatNumber = (value, decimals = 2) => {
-    return new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    }).format(value);
-  };
-
-  const formatPrice = (price, pair) => {
-    const p = parseFloat(price);
-    if (pair === "librebtc") {
-      return p.toFixed(10);
-    }
-    return formatNumber(p, 2);
-  };
-
-  const getMarketStats = (orderList, pair) => {
+  const getMarketStats = (orderList, pairKey) => {
+    const config = PAIR_CONFIG[pairKey];
     const bids = orderList.filter((o) => o.type === "buy");
     const asks = orderList.filter((o) => o.type === "sell");
 
-    const isBtcUsdt = pair === "btcusdt";
-
-    // For BTCUSDT: base is BTC, quote is USDT
-    // For LIBREBTC: base is LIBRE, quote is BTC
+    // Bid depth is in quote asset, ask depth is in base asset
     const bidDepth = bids.reduce(
-      (sum, o) => sum + parseAssetAmount(isBtcUsdt ? o.quoteAsset : o.quoteAsset),
+      (sum, o) => sum + parseAssetAmount(o.quoteAsset),
       0
     );
     const askDepth = asks.reduce(
-      (sum, o) => sum + parseAssetAmount(isBtcUsdt ? o.baseAsset : o.baseAsset),
+      (sum, o) => sum + parseAssetAmount(o.baseAsset),
       0
     );
 
@@ -125,17 +143,22 @@ const DexAnalysis = () => {
     const accountStats = {};
     orderList.forEach((order) => {
       if (!accountStats[order.account]) {
-        accountStats[order.account] = { bids: 0, asks: 0, bidValue: 0, askValue: 0 };
+        accountStats[order.account] = {
+          bids: 0,
+          asks: 0,
+          bidValue: 0,
+          askValue: 0,
+        };
       }
       if (order.type === "buy") {
         accountStats[order.account].bids++;
         accountStats[order.account].bidValue += parseAssetAmount(
-          isBtcUsdt ? order.quoteAsset : order.quoteAsset
+          order.quoteAsset
         );
       } else {
         accountStats[order.account].asks++;
         accountStats[order.account].askValue += parseAssetAmount(
-          isBtcUsdt ? order.baseAsset : order.baseAsset
+          order.baseAsset
         );
       }
     });
@@ -145,253 +168,320 @@ const DexAnalysis = () => {
       asks,
       bidDepth,
       askDepth,
-      bidDepthUnit: isBtcUsdt ? "USDT" : "BTC",
-      askDepthUnit: isBtcUsdt ? "BTC" : "LIBRE",
+      config,
       accountStats,
     };
   };
 
-  const renderOrderTable = (orderList, type, pair) => {
-    const isBtcUsdt = pair === "btcusdt";
-    const sorted = [...orderList].sort((a, b) => {
-      const priceA = parseFloat(a.price);
-      const priceB = parseFloat(b.price);
-      return type === "buy" ? priceB - priceA : priceA - priceB;
-    });
-
-    return (
-      <Table striped bordered hover size="sm" className="mb-0">
-        <thead>
-          <tr>
-            <th>Account</th>
-            <th className="text-end">{isBtcUsdt ? "BTC" : "LIBRE"}</th>
-            <th className="text-end">{isBtcUsdt ? "USDT" : "BTC"}</th>
-            <th className="text-end">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((order) => (
-            <tr key={order.identifier}>
-              <td>
-                <a
-                  href={`https://www.libreblocks.io/account/${order.account}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {order.account}
-                </a>
-              </td>
-              <td className="text-end font-monospace">
-                {formatNumber(parseAssetAmount(order.baseAsset), isBtcUsdt ? 8 : 4)}
-              </td>
-              <td className="text-end font-monospace">
-                {formatNumber(parseAssetAmount(order.quoteAsset), isBtcUsdt ? 2 : 8)}
-              </td>
-              <td className="text-end font-monospace">
-                {formatPrice(order.price, pair)}
-              </td>
-            </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr>
-              <td colSpan={4} className="text-center text-muted">
-                No {type === "buy" ? "bids" : "offers"}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </Table>
-    );
+  const handlePairChange = (newPair) => {
+    setPair(newPair);
   };
 
-  const renderAccountStats = (accountStats, pair) => {
-    const isBtcUsdt = pair === "btcusdt";
-    const sorted = Object.entries(accountStats).sort(
-      (a, b) => b[1].bidValue + b[1].askValue - (a[1].bidValue + a[1].askValue)
-    );
+  const orderList = orders[pair];
+  const stats = getMarketStats(orderList, pair);
+  const config = PAIR_CONFIG[pair];
 
-    return (
-      <Table striped bordered hover size="sm">
-        <thead>
-          <tr>
-            <th>Account</th>
-            <th className="text-center">Bids</th>
-            <th className="text-end">Bid Value ({isBtcUsdt ? "USDT" : "BTC"})</th>
-            <th className="text-center">Offers</th>
-            <th className="text-end">Offer Value ({isBtcUsdt ? "BTC" : "LIBRE"})</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(([account, stats]) => (
-            <tr key={account}>
-              <td>
-                <a
-                  href={`https://www.libreblocks.io/account/${account}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {account}
-                </a>
-              </td>
-              <td className="text-center">{stats.bids}</td>
-              <td className="text-end font-monospace">
-                {formatNumber(stats.bidValue, isBtcUsdt ? 2 : 8)}
-              </td>
-              <td className="text-center">{stats.asks}</td>
-              <td className="text-end font-monospace">
-                {formatNumber(stats.askValue, isBtcUsdt ? 8 : 4)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    );
-  };
-
-  const renderPairAnalysis = (pair) => {
-    const orderList = orders[pair];
-    const stats = getMarketStats(orderList, pair);
-    const pairLabel = pair === "btcusdt" ? "BTC/USDT" : "LIBRE/BTC";
-
-    return (
-      <div>
-        {/* Market Depth Summary */}
-        <div className="row mb-4">
-          <div className="col-md-4">
-            <Card className="h-100">
-              <Card.Body className="text-center">
-                <h6 className="text-muted mb-2">Total Orders</h6>
-                <h3>{orderList.length}</h3>
-                <small className="text-muted">
-                  {stats.bids.length} bids · {stats.asks.length} offers
-                </small>
-              </Card.Body>
-            </Card>
-          </div>
-          <div className="col-md-4">
-            <Card className="h-100 border-success">
-              <Card.Body className="text-center">
-                <h6 className="text-success mb-2">Bid Depth</h6>
-                <h3 className="text-success">
-                  {formatNumber(stats.bidDepth, stats.bidDepthUnit === "USDT" ? 2 : 8)}
-                </h3>
-                <small className="text-muted">{stats.bidDepthUnit}</small>
-              </Card.Body>
-            </Card>
-          </div>
-          <div className="col-md-4">
-            <Card className="h-100 border-danger">
-              <Card.Body className="text-center">
-                <h6 className="text-danger mb-2">Ask Depth</h6>
-                <h3 className="text-danger">
-                  {formatNumber(stats.askDepth, stats.askDepthUnit === "BTC" ? 8 : 4)}
-                </h3>
-                <small className="text-muted">{stats.askDepthUnit}</small>
-              </Card.Body>
-            </Card>
-          </div>
-        </div>
-
-        {/* Order Books */}
-        <div className="row mb-4">
-          <div className="col-md-6">
-            <Card>
-              <Card.Header className="bg-success text-white">
-                <strong>Bids (Buy Orders)</strong>
-                <Badge bg="light" text="dark" className="ms-2">
-                  {stats.bids.length}
-                </Badge>
-              </Card.Header>
-              <Card.Body className="p-0" style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {renderOrderTable(stats.bids, "buy", pair)}
-              </Card.Body>
-            </Card>
-          </div>
-          <div className="col-md-6">
-            <Card>
-              <Card.Header className="bg-danger text-white">
-                <strong>Offers (Sell Orders)</strong>
-                <Badge bg="light" text="dark" className="ms-2">
-                  {stats.asks.length}
-                </Badge>
-              </Card.Header>
-              <Card.Body className="p-0" style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {renderOrderTable(stats.asks, "sell", pair)}
-              </Card.Body>
-            </Card>
-          </div>
-        </div>
-
-        {/* Account Summary */}
-        <Card>
-          <Card.Header>
-            <strong>Liquidity by Account</strong>
-            <Badge bg="secondary" className="ms-2">
-              {Object.keys(stats.accountStats).length} accounts
-            </Badge>
-          </Card.Header>
-          <Card.Body className="p-0">
-            {renderAccountStats(stats.accountStats, pair)}
-          </Card.Body>
-        </Card>
-      </div>
-    );
-  };
+  const sortedBids = [...stats.bids].sort(
+    (a, b) => parseFloat(b.price) - parseFloat(a.price)
+  );
+  const sortedAsks = [...stats.asks].sort(
+    (a, b) => parseFloat(a.price) - parseFloat(b.price)
+  );
+  const sortedAccounts = Object.entries(stats.accountStats).sort(
+    (a, b) => b[1].bidValue + b[1].askValue - (a[1].bidValue + a[1].askValue)
+  );
 
   return (
     <div className="container-fluid">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>DEX Analysis</h2>
-        <button
-          className="btn btn-outline-primary"
-          onClick={fetchOrders}
-          disabled={isLoading}
-        >
+      <div className="d-flex justify-content-center">
+        <div style={{ width: "100%" }}>
+          <h2 className="mb-4">DEX Analysis</h2>
+
+          <div className="alert alert-info mb-4">
+            <div className="d-flex">
+              <i className="bi bi-info-circle me-2 mt-1"></i>
+              <div>
+                <div>
+                  Analyze open orders on the Libre DEX orderbook. View market
+                  depth, individual orders, and liquidity provided by each
+                  account.
+                </div>
+                <div className="mt-2 px-3 py-2 bg-white text-info border border-info rounded">
+                  <strong className="me-1">Quick tip:</strong>
+                  Click on any account to view it on the block explorer.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <Alert variant="danger" className="mb-4">
+              {error}
+            </Alert>
+          )}
+
           {isLoading ? (
-            <>
-              <Spinner size="sm" className="me-2" />
-              Loading...
-            </>
+            <div className="text-center my-5">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
           ) : (
             <>
-              <i className="bi bi-arrow-clockwise me-2"></i>
-              Refresh
+              {/* Summary Cards */}
+              <div className="row mb-4">
+                <div className="col-md-4">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">Total Orders</h5>
+                      <p className="card-text h3">{orderList.length}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">
+                        Bid Depth ({config.quoteSymbol})
+                      </h5>
+                      <p className="card-text h3 text-success">
+                        {formatNumber(
+                          stats.bidDepth.toFixed(config.quoteDecimals)
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">
+                        Ask Depth ({config.baseSymbol})
+                      </h5>
+                      <p className="card-text h3 text-danger">
+                        {formatNumber(
+                          stats.askDepth.toFixed(config.baseDecimals)
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Orders Table */}
+              <div className="card mb-4">
+                <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0">
+                    {config.label} Orders ({stats.bids.length} bids,{" "}
+                    {stats.asks.length} asks)
+                  </h5>
+                  <Dropdown>
+                    <Dropdown.Toggle variant="primary" id="pair-selector">
+                      {config.label}
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu>
+                      <Dropdown.Item
+                        active={pair === "btcusdt"}
+                        onClick={() => handlePairChange("btcusdt")}
+                      >
+                        BTC/USDT ({orders.btcusdt.length})
+                      </Dropdown.Item>
+                      <Dropdown.Item
+                        active={pair === "librebtc"}
+                        onClick={() => handlePairChange("librebtc")}
+                      >
+                        LIBRE/BTC ({orders.librebtc.length})
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </div>
+                <div className="card-body">
+                  <div className="row">
+                    {/* Bids */}
+                    <div className="col-md-6">
+                      <h6 className="text-success mb-3">
+                        <i className="bi bi-arrow-up-circle me-2"></i>
+                        Bids (Buy Orders)
+                        <Badge bg="success" className="ms-2">
+                          {stats.bids.length}
+                        </Badge>
+                      </h6>
+                      <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                        <Table striped bordered hover size="sm">
+                          <thead>
+                            <tr>
+                              <th>Account</th>
+                              <th className="text-end">{config.baseSymbol}</th>
+                              <th className="text-end">{config.quoteSymbol}</th>
+                              <th className="text-end">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedBids.map((order) => (
+                              <tr key={order.identifier}>
+                                <td>
+                                  <a
+                                    href={`https://www.libreblocks.io/account/${order.account}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {order.account}
+                                  </a>
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseAssetAmount(order.baseAsset).toFixed(
+                                    config.baseDecimals
+                                  )}
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseAssetAmount(order.quoteAsset).toFixed(
+                                    config.quoteDecimals
+                                  )}
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseFloat(order.price).toFixed(
+                                    config.priceDecimals
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {sortedBids.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className="text-center text-muted"
+                                >
+                                  No bids
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </Table>
+                      </div>
+                    </div>
+
+                    {/* Asks */}
+                    <div className="col-md-6">
+                      <h6 className="text-danger mb-3">
+                        <i className="bi bi-arrow-down-circle me-2"></i>
+                        Asks (Sell Orders)
+                        <Badge bg="danger" className="ms-2">
+                          {stats.asks.length}
+                        </Badge>
+                      </h6>
+                      <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                        <Table striped bordered hover size="sm">
+                          <thead>
+                            <tr>
+                              <th>Account</th>
+                              <th className="text-end">{config.baseSymbol}</th>
+                              <th className="text-end">{config.quoteSymbol}</th>
+                              <th className="text-end">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedAsks.map((order) => (
+                              <tr key={order.identifier}>
+                                <td>
+                                  <a
+                                    href={`https://www.libreblocks.io/account/${order.account}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {order.account}
+                                  </a>
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseAssetAmount(order.baseAsset).toFixed(
+                                    config.baseDecimals
+                                  )}
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseAssetAmount(order.quoteAsset).toFixed(
+                                    config.quoteDecimals
+                                  )}
+                                </td>
+                                <td className="text-end font-monospace">
+                                  {parseFloat(order.price).toFixed(
+                                    config.priceDecimals
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {sortedAsks.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className="text-center text-muted"
+                                >
+                                  No asks
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </Table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Account Summary */}
+              <div className="card">
+                <div className="card-header bg-primary text-white">
+                  <h5 className="mb-0">
+                    Liquidity by Account ({sortedAccounts.length} accounts)
+                  </h5>
+                </div>
+                <div className="card-body">
+                  <Table striped bordered hover responsive>
+                    <thead>
+                      <tr>
+                        <th>Account</th>
+                        <th className="text-center">Bids</th>
+                        <th className="text-end">
+                          Bid Value ({config.quoteSymbol})
+                        </th>
+                        <th className="text-center">Offers</th>
+                        <th className="text-end">
+                          Offer Value ({config.baseSymbol})
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedAccounts.map(([account, accountStats]) => (
+                        <tr key={account}>
+                          <td>
+                            <a
+                              href={`https://www.libreblocks.io/account/${account}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {account}
+                            </a>
+                          </td>
+                          <td className="text-center">{accountStats.bids}</td>
+                          <td className="text-end font-monospace">
+                            {formatNumber(
+                              accountStats.bidValue.toFixed(config.quoteDecimals)
+                            )}
+                          </td>
+                          <td className="text-center">{accountStats.asks}</td>
+                          <td className="text-end font-monospace">
+                            {formatNumber(
+                              accountStats.askValue.toFixed(config.baseDecimals)
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              </div>
             </>
           )}
-        </button>
-      </div>
-
-      <Alert variant="info" className="mb-4">
-        <i className="bi bi-info-circle me-2"></i>
-        Analysis of open orders on the Libre DEX orderbook. Shows market depth, individual orders, and liquidity provided by each account.
-      </Alert>
-
-      {error && (
-        <Alert variant="danger" className="mb-4">
-          <i className="bi bi-exclamation-triangle me-2"></i>
-          {error}
-        </Alert>
-      )}
-
-      {isLoading && orders.btcusdt.length === 0 ? (
-        <div className="text-center py-5">
-          <Spinner animation="border" />
-          <p className="mt-3">Loading orderbook data...</p>
         </div>
-      ) : (
-        <Tabs
-          activeKey={activeTab}
-          onSelect={(k) => setActiveTab(k)}
-          className="mb-4"
-        >
-          <Tab eventKey="btcusdt" title={`BTC/USDT (${orders.btcusdt.length} orders)`}>
-            {renderPairAnalysis("btcusdt")}
-          </Tab>
-          <Tab eventKey="librebtc" title={`LIBRE/BTC (${orders.librebtc.length} orders)`}>
-            {renderPairAnalysis("librebtc")}
-          </Tab>
-        </Tabs>
-      )}
+      </div>
     </div>
   );
 };
