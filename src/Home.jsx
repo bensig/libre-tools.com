@@ -3,14 +3,14 @@ import { Link } from 'react-router-dom';
 const Home = () => {
   const tools = [
     {
-      title: 'DEX Analysis',
-      path: '/dex-analysis',
-      description: 'Analyze the Libre DEX orderbook. View market depth, open orders by account, and liquidity distribution across BTC/USDT and LIBRE/BTC pairs.'
-    },
-    {
       title: 'Loan Overview',
       path: '/loans',
       description: 'Monitor USDT loans and BTC collateral on the Libre blockchain. Track pool statistics, active loans, and liquidations. Click on any account or collateral balance below to see the on-chain collateral for that loan in its own dedicated address.'
+    },
+    {
+      title: 'DEX Analysis',
+      path: '/dex-analysis',
+      description: 'Analyze the Libre DEX orderbook. View market depth, open orders by account, and liquidity distribution across BTC/USDT and LIBRE/BTC pairs.'
     },
     {
       title: 'Contract Explorer',

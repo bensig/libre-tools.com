@@ -174,7 +174,7 @@ const DexAnalysis = () => {
             <tr key={order.identifier}>
               <td>
                 <a
-                  href={`https://www.librebloks.io/account/${order.account}`}
+                  href={`https://www.libreblocks.io/account/${order.account}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -226,7 +226,7 @@ const DexAnalysis = () => {
             <tr key={account}>
               <td>
                 <a
-                  href={`https://www.librebloks.io/account/${account}`}
+                  href={`https://www.libreblocks.io/account/${account}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

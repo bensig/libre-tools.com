@@ -20,6 +20,7 @@ const Layout = ({ children }) => {
           <Navbar.Collapse id="basic-navbar-nav">
             <Nav className="me-auto">
               <Nav.Link as={Link} to="/loans" className="fs-6">Loans</Nav.Link>
+              <Nav.Link as={Link} to="/dex-analysis" className="fs-6">DEX</Nav.Link>
               <Nav.Link as={Link} to="/explorer" className="fs-6">Contracts</Nav.Link>
               <Nav.Link as={Link} to="/transactions" className="fs-6">Accounts</Nav.Link>
               <Nav.Link as={Link} to="/btc-tracker" className="fs-6">Bridge</Nav.Link>
