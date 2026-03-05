@@ -13,14 +13,19 @@ const Home = () => {
       description: 'Analyze the Libre DEX orderbook. View market depth, open orders by account, and liquidity distribution across BTC/USDT and LIBRE/BTC pairs.'
     },
     {
+      title: 'Account Lookup',
+      path: '/account',
+      description: 'Look up any Libre account by name or public key. View permissions, keys, thresholds, linked actions, resource usage, token balances, votes, and recent activity.'
+    },
+    {
       title: 'Contract Explorer',
       path: '/explorer',
       description: 'Browse and inspect smart contract data on the Libre blockchain. View table contents, scope data, and contract actions.'
     },
     {
-      title: 'Account History Viewer',
+      title: 'Transaction History',
       path: '/transactions',
-      description: 'Download and analyze account history for any Libre account. Filter by date range and export to CSV format.'
+      description: 'Download and analyze transaction history for any Libre account. Filter by date range and export to CSV format.'
     },
     {
       title: 'Bitcoin Bridge Tracker',

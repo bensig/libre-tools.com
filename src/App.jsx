@@ -9,6 +9,7 @@ import MultisigProposals from './MultisigProposals';
 import LoanTracker from './LoanTracker';
 import VaultChecker from './VaultChecker';
 import DexAnalysis from './DexAnalysis';
+import AccountLookup from './AccountLookup';
 
 function App() {
   return (
@@ -36,6 +37,9 @@ function App() {
                 <Route path="/vault-checker" element={<VaultChecker />} />
                 <Route path="/dex-analysis" element={<DexAnalysis />} />
                 <Route path="/dex-analysis/:pair" element={<DexAnalysis />} />
+                <Route path="/account" element={<AccountLookup />} />
+                <Route path="/account/:network" element={<AccountLookup />} />
+                <Route path="/account/:network/:query" element={<AccountLookup />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
