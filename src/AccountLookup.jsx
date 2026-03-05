@@ -501,7 +501,7 @@ const AccountLookup = () => {
                       <Badge bg="secondary" className="me-2">Inactive Producer</Badge>
                     )}
                     {votedProducers.length > 0 && (
-                      <Badge pill bg="" style={{ backgroundColor: "#7952b3" }} className="me-2 px-3 py-2">
+                      <Badge bg="" style={{ backgroundColor: "#7952b3" }} className="me-2">
                         Voted: {votedProducers[0]}
                       </Badge>
                     )}
