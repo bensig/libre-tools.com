@@ -82,12 +82,15 @@ const AccountLookup = () => {
   };
 
   const performSearch = async (query, net) => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return;
+    const raw = query.trim();
+    if (!raw) return;
+
+    const isKey = isPublicKey(raw);
+    const trimmed = isKey ? raw : raw.toLowerCase();
 
     const currentNet = net || network;
 
-    if (!isPublicKey(trimmed) && !isValidAccountName(trimmed)) {
+    if (!isKey && !isValidAccountName(trimmed)) {
       setError("Invalid account name. Must be 1-13 characters, only a-z, 1-5, and \".\" allowed.");
       return;
     }
@@ -412,7 +415,10 @@ const AccountLookup = () => {
                 type="text"
                 placeholder="Enter account name or public key"
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value.toLowerCase())}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSearchInput(isPublicKey(v) ? v : v.toLowerCase());
+                }}
                 className="font-monospace"
               />
               <Button variant="primary" type="submit" disabled={isLoading || !searchInput.trim()}>
