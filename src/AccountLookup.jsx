@@ -399,7 +399,7 @@ const AccountLookup = () => {
             <InputGroup>
               <Form.Control
                 type="text"
-                placeholder="Enter account name or public key (EOS...)"
+                placeholder="Enter account name or public key"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="font-monospace"
