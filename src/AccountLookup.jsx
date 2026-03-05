@@ -415,10 +415,7 @@ const AccountLookup = () => {
                 type="text"
                 placeholder="Enter account name or public key"
                 value={searchInput}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setSearchInput(isPublicKey(v) ? v : v.toLowerCase());
-                }}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="font-monospace"
               />
               <Button variant="primary" type="submit" disabled={isLoading || !searchInput.trim()}>
