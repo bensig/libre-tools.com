@@ -505,6 +505,9 @@ const AccountLookup = () => {
                         Voted: {votedProducers[0]}
                       </Badge>
                     )}
+                    {accountData.last_code_update && accountData.last_code_update !== "1970-01-01T00:00:00.000" && (
+                      <Badge bg="info" className="me-2">Smart Contract</Badge>
+                    )}
                     {accountData.privileged && (
                       <Badge bg="warning">Privileged</Badge>
                     )}
