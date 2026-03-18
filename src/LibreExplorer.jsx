@@ -806,11 +806,21 @@ const LibreExplorer = () => {
       const shouldApplySearch = !ignoreSearch && searchKey && searchField;
 
       if (shouldApplySearch) {
-        params.lower_bound = searchKey;
-        params.upper_bound = searchKey;
-
         const indexParams = getIndexParams(currentTable, searchField);
         Object.assign(params, indexParams);
+
+        // For 'name' type keys, support prefix/partial matching
+        // by padding the upper_bound with 'z' (highest valid name char)
+        if (indexParams.key_type === 'name' || searchField === 'owner' || searchField === 'account' || searchField === 'from' || searchField === 'to') {
+          params.lower_bound = searchKey;
+          // Pad to 12 chars with 'z' for prefix search (EOSIO names are max 12 chars)
+          params.upper_bound = searchKey.length < 12
+            ? searchKey + 'z'.repeat(12 - searchKey.length)
+            : searchKey;
+        } else {
+          params.lower_bound = searchKey;
+          params.upper_bound = searchKey;
+        }
       } else if (effectiveInitialLoad) {
         // Don't add any bounds for initial load
       } else if (direction === 'forward' && nextKey) {
@@ -1592,11 +1602,18 @@ const LibreExplorer = () => {
     };
 
     if (searchKey && searchField) {
-      params.lower_bound = searchKey;
-      params.upper_bound = searchKey;
-
       const indexParams = getIndexParams(selectedTable, searchField);
       Object.assign(params, indexParams);
+
+      if (indexParams.key_type === 'name' || searchField === 'owner' || searchField === 'account' || searchField === 'from' || searchField === 'to') {
+        params.lower_bound = searchKey;
+        params.upper_bound = searchKey.length < 12
+          ? searchKey + 'z'.repeat(12 - searchKey.length)
+          : searchKey;
+      } else {
+        params.lower_bound = searchKey;
+        params.upper_bound = searchKey;
+      }
     }
 
     return `curl -X POST ${getApiEndpoint()}/v1/chain/get_table_rows -d '${JSON.stringify(params, null, 2)}'`;
