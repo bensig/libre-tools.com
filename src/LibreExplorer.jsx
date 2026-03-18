@@ -590,6 +590,57 @@ const LibreExplorer = () => {
     return abiData.abi.tables.find((table) => table.name === tableName) || null;
   };
 
+  // Look up a table's struct fields from the ABI
+  const getStructForTable = (tableName) => {
+    if (!abiData?.abi?.tables || !abiData?.abi?.structs) return null;
+    const tableDef = abiData.abi.tables.find((t) => t.name === tableName);
+    if (!tableDef) return null;
+    const structDef = abiData.abi.structs.find((s) => s.name === tableDef.type);
+    return structDef?.fields || null;
+  };
+
+  // Hardcoded secondary indexes for known contracts/tables
+  const KNOWN_SECONDARY_INDEXES = {
+    't.libre': { maccounts: { field: 'account', index_position: 2, key_type: 'name' } },
+    'x.libre': { maccounts: { field: 'account', index_position: 2, key_type: 'name' } },
+    'v.libre': { maccounts: { field: 'account', index_position: 2, key_type: 'name' } },
+  };
+
+  // Infer secondary index for a name-type field from ABI struct definition.
+  // If the primary key (first field) is not 'name' type but the target field is,
+  // it's very likely a secondary index at position 2.
+  const inferSecondaryIndex = (tableName, fieldName) => {
+    // Check hardcoded overrides first
+    const knownContract = KNOWN_SECONDARY_INDEXES[accountName];
+    if (knownContract?.[tableName]?.field === fieldName) {
+      return {
+        index_position: knownContract[tableName].index_position,
+        key_type: knownContract[tableName].key_type,
+      };
+    }
+
+    // Infer from ABI struct
+    const fields = getStructForTable(tableName);
+    if (!fields || fields.length === 0) return null;
+
+    const firstField = fields[0];
+    const targetField = fields.find((f) => f.name === fieldName);
+    if (!targetField) return null;
+
+    // If the target field IS the first field and is 'name' type, it's the primary key
+    if (firstField.name === fieldName && firstField.type === 'name') {
+      return { isPrimary: true };
+    }
+
+    // If the first field is NOT 'name' (e.g. uint64 id) and the target is 'name' type,
+    // infer it as secondary index position 2
+    if (firstField.type !== 'name' && targetField.type === 'name') {
+      return { index_position: 2, key_type: 'name' };
+    }
+
+    return null;
+  };
+
   const normalizeKeyType = (keyType, fieldName) => {
     if (!keyType) {
       if (fieldName === 'owner') {
@@ -624,24 +675,28 @@ const LibreExplorer = () => {
       ? { key_type: 'name' }
       : null;
 
-    if (!tableDefinition) {
-      return fallbackForLoanVault || {};
+    // Try ABI key_names first (if populated)
+    if (tableDefinition) {
+      const keyNames = tableDefinition.key_names || [];
+      const keyTypes = tableDefinition.key_types || [];
+      const matchIndex = keyNames.indexOf(fieldName);
+
+      if (matchIndex !== -1) {
+        const normalizedKeyType = normalizeKeyType(keyTypes[matchIndex], fieldName);
+        return {
+          index_position: matchIndex + 2,
+          ...(normalizedKeyType ? { key_type: normalizedKeyType } : {}),
+        };
+      }
     }
 
-    const keyNames = tableDefinition.key_names || [];
-    const keyTypes = tableDefinition.key_types || [];
-    const matchIndex = keyNames.indexOf(fieldName);
-
-    if (matchIndex === -1) {
-      return fallbackForLoanVault || {};
+    // Try struct-based inference + hardcoded overrides
+    const inferred = inferSecondaryIndex(tableName, fieldName);
+    if (inferred && !inferred.isPrimary && inferred.index_position) {
+      return { index_position: inferred.index_position, key_type: inferred.key_type };
     }
 
-    const normalizedKeyType = normalizeKeyType(keyTypes[matchIndex], fieldName);
-
-    return {
-      index_position: matchIndex + 2,
-      ...(normalizedKeyType ? { key_type: normalizedKeyType } : {}),
-    };
+    return fallbackForLoanVault || {};
   };
 
   const determineSearchField = (rows, tableName) => {
@@ -673,6 +728,20 @@ const LibreExplorer = () => {
       });
     }
 
+    // Also check ABI struct for name-type fields not already in candidates
+    const structFields = getStructForTable(tableName);
+    if (structFields) {
+      for (const sf of structFields) {
+        if (sf.type === 'name' && !baseFields.some((f) => f.field === sf.name) && !dynamicFields.some((f) => f.field === sf.name)) {
+          dynamicFields.push({
+            field: sf.name,
+            displayName: sf.name,
+            requiresIndex: true,
+          });
+        }
+      }
+    }
+
     const candidates = [...baseFields, ...dynamicFields];
 
     for (const candidate of candidates) {
@@ -683,6 +752,17 @@ const LibreExplorer = () => {
             continue;
           }
         }
+
+        // For base fields like 'account', check if they need secondary index params
+        // (i.e. they're not the primary key)
+        if (!candidate.requiresIndex && candidate.field !== 'id') {
+          const inferred = inferSecondaryIndex(tableName, candidate.field);
+          if (inferred && !inferred.isPrimary && inferred.index_position) {
+            // This field needs a secondary index to search — mark it so getIndexParams handles it
+            candidate.requiresIndex = true;
+          }
+        }
+
         return candidate;
       }
     }
