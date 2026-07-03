@@ -3,7 +3,7 @@ import Layout from './components/Layout';
 import Home from './Home';
 import LibreExplorer from './LibreExplorer';
 import TransactionDownloader from './TransactionDownloader';
-import BtcTracker from './BtcTracker';
+import BridgeTracker from './BridgeTracker';
 import SeedGenerator from './SeedGenerator';
 import MultisigProposals from './MultisigProposals';
 import LoanTracker from './LoanTracker';
@@ -27,7 +27,8 @@ function App() {
                 <Route path="/explorer/:network/:contract/:view/:item" element={<LibreExplorer />} />
                 <Route path="/explorer/:network/:contract/:view/:item/:scope" element={<LibreExplorer />} />
                 <Route path="/transactions" element={<TransactionDownloader />} />
-                <Route path="/btc-tracker" element={<BtcTracker />} />
+                <Route path="/bridge-tracker" element={<BridgeTracker />} />
+                <Route path="/btc-tracker" element={<Navigate to="/bridge-tracker" replace />} />
                 <Route path="/seed-generator" element={<SeedGenerator />} />
                 <Route path="/multisig" element={<MultisigProposals />} />
                 <Route path="/loans" element={<LoanTracker />} />

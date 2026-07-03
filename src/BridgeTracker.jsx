@@ -1,12 +1,24 @@
 import { useState } from 'react';
 import { Form, Button, Spinner } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
+import {
+  classifyHash,
+  isEthAddress,
+  isZeroHash,
+  findEthPegIn,
+  findEthPegOut,
+  findEthPegOutByAddressAndAmount,
+  findEthMintTransaction,
+  parseEthHashFromMemo,
+  getEthTransactionReceipt,
+  decodeErc20Transfers,
+  findAccountByEthAddress,
+  ETH_BRIDGE_CONTRACT,
+  USDT_TOKEN_CONTRACT,
+} from './utils/bridgeTracker';
 
-const isValidHash = (hash) => {
-  // Bitcoin and Libre transaction hashes are 64 character hex strings
-  const hashRegex = /^[0-9a-fA-F]{64}$/;
-  return hashRegex.test(hash);
-};
+// BTC/Libre hashes are bare 64-char hex; ETH hashes are 0x-prefixed
+const isValidHash = (hash) => classifyHash(hash) !== null;
 
 const truncateHash = (hash) => {
   if (!hash) return '';
@@ -18,7 +30,7 @@ const truncateAddress = (address) => {
   return `${address.slice(0, 5)}-${address.slice(-5)}`;
 };
 
-const BtcTracker = () => {
+const BridgeTracker = () => {
   const [hash, setHash] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -30,11 +42,15 @@ const BtcTracker = () => {
   const NETWORK_ENDPOINTS = {
     mainnet: {
       libre: 'https://lb.libre.org',
-      btc: 'https://mempool.space'
+      btc: 'https://mempool.space',
+      ethRpc: 'https://ethereum-rpc.publicnode.com',
+      etherscan: 'https://etherscan.io'
     },
     testnet: {
       libre: 'https://test.libre.eosusa.io',
-      btc: 'https://mempool.space/signet'
+      btc: 'https://mempool.space/signet',
+      ethRpc: 'https://ethereum-sepolia-rpc.publicnode.com',
+      etherscan: 'https://sepolia.etherscan.io'
     }
   };
 
@@ -43,7 +59,8 @@ const BtcTracker = () => {
       if (!customEndpoint) {
         throw new Error('Custom endpoint is required');
       }
-      return formatEndpoint(customEndpoint);
+      // Custom endpoint replaces the Libre API; external chains stay on mainnet services
+      return { ...NETWORK_ENDPOINTS.mainnet, libre: formatEndpoint(customEndpoint) };
     }
     return NETWORK_ENDPOINTS[network];
   };
@@ -67,6 +84,79 @@ const BtcTracker = () => {
     }
   };
 
+  // ETH hash lookup: the bridge contract stores eth_tx_hash on-chain in both
+  // directions, so peg-ins/peg-outs resolve from t.libre history tables
+  const trackEthHash = async (baseEndpoint, ethHash) => {
+    // Peg-in: ETH -> Libre (t.libre txhistory, scoped by status)
+    const pegIn = await findEthPegIn(baseEndpoint.libre, ethHash);
+    if (pegIn) {
+      const { scope, row } = pegIn;
+      const mint = !isZeroHash(row.mint_hash)
+        ? { trxId: row.mint_hash }
+        : await findEthMintTransaction(baseEndpoint.libre, row.to, ethHash).catch(() => null);
+      setResult({
+        chain: 'eth',
+        type: 'peg-in',
+        status: scope === 'confirmed' ? 'completed' : scope,
+        ethHash,
+        libreHash: mint?.trxId,
+        libreAccount: row.to,
+        amount: row.quantity,
+        fee: row.tx_fee,
+        netAmount: row.net_amount,
+        libreTimestamp: mint?.timestamp ? new Date(`${mint.timestamp}Z`).toLocaleString() : null
+      });
+      return true;
+    }
+
+    // Peg-out: Libre -> ETH (t.libre ptxhistory, scoped by status)
+    const pegOut = await findEthPegOut(baseEndpoint.libre, ethHash);
+    if (pegOut) {
+      const { scope, row } = pegOut;
+      setResult({
+        chain: 'eth',
+        type: 'peg-out',
+        status: scope,
+        ethHash,
+        libreHash: !isZeroHash(row.tx_hash) ? row.tx_hash : null,
+        from: row.from,
+        ethAddress: row.to,
+        amount: row.quantity,
+        fee: row.tx_fee,
+        netAmount: row.net_amount
+      });
+      if (scope === 'canceled') {
+        setError('Transaction was canceled');
+      }
+      return true;
+    }
+
+    // Not registered with the bridge yet - check Ethereum directly and see
+    // whether it pays a known bridge deposit address
+    const receipt = await getEthTransactionReceipt(baseEndpoint.ethRpc, ethHash).catch(() => null);
+    if (receipt) {
+      for (const transfer of decodeErc20Transfers(receipt)) {
+        const account = await findAccountByEthAddress(baseEndpoint.libre, transfer.to).catch(() => null);
+        if (account) {
+          setResult({
+            chain: 'eth',
+            type: 'peg-in',
+            status: 'pending',
+            ethHash,
+            libreAccount: account,
+            amount: `${(transfer.value / 1e6).toFixed(6)} USDT`
+          });
+          setError('Deposit found on Ethereum but not yet processed by the bridge - check back soon');
+          return true;
+        }
+      }
+      setError('Transaction found on Ethereum, but it does not transfer to a Libre bridge deposit address');
+      return true;
+    }
+
+    return false;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!hash) return;
@@ -77,6 +167,15 @@ const BtcTracker = () => {
 
     try {
       const baseEndpoint = getApiEndpoint();
+
+      // 0x-prefixed hashes are Ethereum-only; skip the Libre/BTC checks
+      if (classifyHash(hash) === 'eth') {
+        const found = await trackEthHash(baseEndpoint, hash.trim().toLowerCase());
+        if (!found) {
+          setError('Transaction not found in the Libre bridge or on Ethereum');
+        }
+        return;
+      }
 
       // Check both Libre and BTC simultaneously
       const [libreResponse, btcResponse] = await Promise.all([
@@ -172,6 +271,62 @@ const BtcTracker = () => {
               });
             }
             return; // Exit after finding result
+          }
+
+          // USDT peg-out: transfer to t.libre with memo = destination ETH address
+          const usdtPegOutTrace = libreData.traces.find(trace =>
+            trace.act.name === 'transfer' &&
+            trace.act.account === USDT_TOKEN_CONTRACT &&
+            trace.act.data?.to === ETH_BRIDGE_CONTRACT &&
+            isEthAddress(trace.act.data.memo)
+          );
+
+          if (usdtPegOutTrace) {
+            const { data } = usdtPegOutTrace.act;
+            const ethAddress = data.memo.trim();
+            const match = await findEthPegOutByAddressAndAmount(baseEndpoint.libre, ethAddress, data.quantity);
+
+            setResult({
+              chain: 'eth',
+              type: 'peg-out',
+              status: match ? match.scope : 'new',
+              libreHash: hash,
+              ethHash: match && !isZeroHash(match.row.eth_tx_hash) ? match.row.eth_tx_hash : null,
+              from: data.from,
+              ethAddress: ethAddress,
+              amount: data.quantity,
+              fee: match?.row.tx_fee,
+              netAmount: match?.row.net_amount,
+              blockTime: usdtPegOutTrace.block_time
+            });
+
+            if (match?.scope === 'canceled') {
+              setError('Transaction was canceled');
+            }
+            return;
+          }
+
+          // USDT peg-in mint: transfer from usdt.libre with memo "Bridge from ETH tx: 0x..."
+          const usdtMintTrace = libreData.traces.find(trace =>
+            trace.act.name === 'transfer' &&
+            trace.act.account === USDT_TOKEN_CONTRACT &&
+            trace.act.data?.from === USDT_TOKEN_CONTRACT &&
+            parseEthHashFromMemo(trace.act.data.memo)
+          );
+
+          if (usdtMintTrace) {
+            const { data } = usdtMintTrace.act;
+            setResult({
+              chain: 'eth',
+              type: 'peg-in',
+              status: 'completed',
+              ethHash: parseEthHashFromMemo(data.memo),
+              libreHash: hash,
+              libreAccount: data.to,
+              amount: data.quantity,
+              blockTime: usdtMintTrace.block_time
+            });
+            return;
           }
         }
       }
@@ -345,15 +500,15 @@ const BtcTracker = () => {
     <div className="container-fluid">
       <div className="d-flex justify-content-end" style={{ marginRight: '20%' }}>
         <div style={{ width: '100%' }}>
-          <h2 className="text-3xl font-bold mb-6">Bitcoin Transaction Tracker</h2>
-          
+          <h2 className="text-3xl font-bold mb-6">Bridge Transaction Tracker</h2>
+
           <div className="alert alert-info mb-4 d-flex">
             <i className="bi bi-info-circle me-2"></i>
             <div>
-              Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks.
+              Track Bitcoin and USDT (Ethereum) bridge transactions to and from the Libre network.
               <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
                 <strong className="me-1">Quick tip:</strong>
-                Paste either a Libre or Bitcoin transaction hash—the tracker checks both chains automatically and links the matching transfer when found.
+                Paste a Libre, Bitcoin, or Ethereum transaction hash—the tracker detects the chain automatically and links the matching bridge transfer when found.
               </div>
             </div>
           </div>
@@ -377,7 +532,7 @@ const BtcTracker = () => {
                   type="text"
                   value={hash}
                   onChange={handleHashChange}
-                  placeholder="Enter Libre or Bitcoin transaction hash"
+                  placeholder="Enter Libre, Bitcoin, or Ethereum transaction hash"
                   autoFocus
                   isInvalid={hash && !isValidHash(hash)}
                   onKeyPress={(e) => {
@@ -396,13 +551,17 @@ const BtcTracker = () => {
                 </Button>
               </div>
               <Form.Text className="text-muted">
-                Example Peg-in: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed')}>1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed</span>
+                Example BTC Peg-in: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed')}>1eb56903cb898a104fc078adca4fb023a0ae3c43c647e898f5d730575909e3ed</span>
                 <br />
-                Example Peg-out: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc')}>8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc</span>
+                Example BTC Peg-out: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc')}>8fa7dab0e27affdb9236cd90e0f2b9797b48a6dad9960ff1df8a1280c4dd66bc</span>
+                <br />
+                Example ETH Peg-in: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('0x90d13a8c7373fd70eae59d16331c8adcc91aa3b0633f3ad24d9f43d6dafeb772')}>0x90d13a8c7373fd70eae59d16331c8adcc91aa3b0633f3ad24d9f43d6dafeb772</span>
+                <br />
+                Example ETH Peg-out: <span className="text-primary" style={{cursor: 'pointer'}} onClick={() => setHash('0xf8369bfd305c20070b08b3833a363bb114270fe30f5be09153887d073447c567')}>0xf8369bfd305c20070b08b3833a363bb114270fe30f5be09153887d073447c567</span>
               </Form.Text>
               {hash && !isValidHash(hash) && (
                 <Form.Text className="text-danger">
-                  Transaction hash must be 64 hexadecimal characters
+                  Transaction hash must be 64 hexadecimal characters (with a 0x prefix for Ethereum)
                 </Form.Text>
               )}
             </Form.Group>
@@ -418,7 +577,9 @@ const BtcTracker = () => {
             <div className="bg-light p-4 rounded mb-4">
               <h3 className="text-xl font-bold mb-3">Transaction Details</h3>
               <div className="space-y-2">
-                <p><strong>Type:</strong> {result.type === 'peg-in' ? 'Bitcoin → Libre' : 'Libre → Bitcoin'}</p>
+                <p><strong>Type:</strong> {result.chain === 'eth'
+                  ? (result.type === 'peg-in' ? 'Ethereum → Libre (USDT)' : 'Libre → Ethereum (USDT)')
+                  : (result.type === 'peg-in' ? 'Bitcoin → Libre' : 'Libre → Bitcoin')}</p>
                 <p><strong>Status:</strong>{' '}
                   <span className={`badge ${
                     result.status === 'completed' ? 'bg-success' : 
@@ -430,8 +591,93 @@ const BtcTracker = () => {
                   </span>
                 </p>
                 <p><strong>Amount:</strong> {result.amount}</p>
-                
-                {result.type === 'peg-out' ? (
+
+                {result.chain === 'eth' ? (
+                  <>
+                    {result.ethHash && (
+                      <p>
+                        <strong>Ethereum Hash:</strong>{' '}
+                        <a
+                          href={`${getApiEndpoint().etherscan}/tx/${result.ethHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary-dark"
+                        >
+                          {truncateHash(result.ethHash)}
+                        </a>
+                      </p>
+                    )}
+
+                    {result.libreHash && (
+                      <p>
+                        <strong>Libre Hash:</strong>{' '}
+                        <a
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/tx/${result.libreHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary-dark"
+                        >
+                          {truncateHash(result.libreHash)}
+                        </a>
+                        {(result.libreTimestamp || result.blockTime) && (
+                          <span className="text-muted ms-2">
+                            ({result.libreTimestamp || new Date(result.blockTime).toLocaleString()})
+                          </span>
+                        )}
+                      </p>
+                    )}
+
+                    {result.from && (
+                      <p>
+                        <strong>From Libre Account:</strong>{' '}
+                        <a
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.from}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary-dark"
+                        >
+                          {result.from}
+                        </a>
+                      </p>
+                    )}
+
+                    {result.libreAccount && (
+                      <p>
+                        <strong>Destination Libre Account:</strong>{' '}
+                        <a
+                          href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.libreAccount}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary-dark"
+                        >
+                          {result.libreAccount}
+                        </a>
+                      </p>
+                    )}
+
+                    {result.ethAddress && (
+                      <p>
+                        <strong>Destination Ethereum Address:</strong>{' '}
+                        <a
+                          href={`${getApiEndpoint().etherscan}/address/${result.ethAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary-dark"
+                        >
+                          {truncateAddress(result.ethAddress)}
+                        </a>
+                      </p>
+                    )}
+
+                    {result.fee && parseFloat(result.fee) > 0 && (
+                      <p><strong>Bridge Fee:</strong> {result.fee}</p>
+                    )}
+
+                    {result.netAmount && parseFloat(result.netAmount) > 0 && (
+                      <p><strong>Net Amount:</strong> {result.netAmount}</p>
+                    )}
+                  </>
+                ) : result.type === 'peg-out' ? (
                   <>
                     {result.libreHash && (
                       <p>
@@ -537,4 +783,4 @@ const BtcTracker = () => {
   );
 };
 
-export default BtcTracker; 
+export default BridgeTracker;

@@ -28,9 +28,9 @@ const Home = () => {
       description: 'Download and analyze transaction history for any Libre account. Filter by date range and export to CSV format.'
     },
     {
-      title: 'Bitcoin Bridge Tracker',
-      path: '/btc-tracker',
-      description: 'Track Bitcoin peg-in and peg-out transactions between Libre and Bitcoin networks. Monitor cross-chain transaction status.'
+      title: 'Bridge Tracker',
+      path: '/bridge-tracker',
+      description: 'Track Bitcoin and USDT (Ethereum) bridge transactions to and from the Libre network. Paste any Libre, Bitcoin, or Ethereum transaction hash.'
     },
     {
       title: 'Vault Inspector',

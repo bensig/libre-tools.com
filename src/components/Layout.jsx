@@ -24,7 +24,7 @@ const Layout = ({ children }) => {
               <Nav.Link as={Link} to="/explorer" className="fs-6">Contracts</Nav.Link>
               <Nav.Link as={Link} to="/account" className="fs-6">Accounts</Nav.Link>
               <Nav.Link as={Link} to="/transactions" className="fs-6">Transactions</Nav.Link>
-              <Nav.Link as={Link} to="/btc-tracker" className="fs-6">Bridge</Nav.Link>
+              <Nav.Link as={Link} to="/bridge-tracker" className="fs-6">Bridge</Nav.Link>
               <Nav.Link as={Link} to="/vault-checker" className="fs-6">Vaults</Nav.Link>
               <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed</Nav.Link>
               <Nav.Link as={Link} to="/multisig" className="fs-6">Multisig</Nav.Link>
