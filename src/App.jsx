@@ -35,7 +35,8 @@ function App() {
                 <Route path="/loans/:network" element={<LoanTracker />} />
                 <Route path="/loans/:network/liquidations" element={<LoanTracker />} />
                 <Route path="/loans/:network/:view" element={<LoanTracker />} />
-                <Route path="/vault-checker" element={<VaultChecker />} />
+                <Route path="/vault" element={<VaultChecker />} />
+                <Route path="/vault-checker" element={<Navigate to="/vault" replace />} />
                 <Route path="/dex-analysis" element={<DexAnalysis />} />
                 <Route path="/dex-analysis/:pair" element={<DexAnalysis />} />
                 <Route path="/account" element={<AccountLookup />} />

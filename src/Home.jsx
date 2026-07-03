@@ -33,9 +33,9 @@ const Home = () => {
       description: 'Track Bitcoin and USDT (Ethereum) bridge transactions to and from the Libre network. Paste any Libre, Bitcoin, or Ethereum transaction hash.'
     },
     {
-      title: 'Vault Inspector',
-      path: '/vault-checker',
-      description: 'Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.'
+      title: 'Vault & Addresses',
+      path: '/vault',
+      description: 'Look up any Libre account to see its BTC and USDT/ETH bridge deposit addresses, its vault collateral address and sync status, plus loan details.'
     },
     {
       title: 'Entropy-Based Seed Tool',

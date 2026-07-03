@@ -1,6 +1,31 @@
 import { useState, useEffect } from 'react';
-import { Form, Button, Alert, Spinner, Table } from 'react-bootstrap';
+import { Form, Button, Alert, Spinner, Table, Badge } from 'react-bootstrap';
 import NetworkSelector from './components/NetworkSelector';
+
+// Primary-key lookup of a single address field in a contract's accounts table.
+// Returns the address string, or null if the account has no entry.
+const lookupAccountAddress = async (libre, code, key, field) => {
+  try {
+    const res = await fetch(`${libre}/v1/chain/get_table_rows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        table: 'accounts',
+        scope: code,
+        lower_bound: key,
+        upper_bound: key,
+        limit: 1,
+        json: true
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.rows && data.rows.length ? data.rows[0][field] : null;
+  } catch {
+    return null;
+  }
+};
 
 const VaultChecker = () => {
   const [searchInput, setSearchInput] = useState('');
@@ -14,11 +39,13 @@ const VaultChecker = () => {
   const NETWORK_ENDPOINTS = {
     mainnet: {
       libre: 'https://lb.libre.org',
-      btc: 'https://mempool.space'
+      btc: 'https://mempool.space',
+      etherscan: 'https://etherscan.io'
     },
     testnet: {
       libre: 'https://testnet.libre.org',
-      btc: 'https://mempool.space/signet'
+      btc: 'https://mempool.space/signet',
+      etherscan: 'https://sepolia.etherscan.io'
     }
   };
 
@@ -27,14 +54,15 @@ const VaultChecker = () => {
       if (!customEndpoint) {
         throw new Error('Custom endpoint is required');
       }
-      
-      const btcEndpoint = network === 'custom-libre-btc-signet' 
+
+      const btcEndpoint = network === 'custom-libre-btc-signet'
         ? 'https://mempool.space/signet'
         : 'https://mempool.space';
-        
+
       return {
         libre: formatEndpoint(customEndpoint),
-        btc: btcEndpoint
+        btc: btcEndpoint,
+        etherscan: 'https://etherscan.io'
       };
     }
     return NETWORK_ENDPOINTS[network];
@@ -134,17 +162,10 @@ const VaultChecker = () => {
       let vaultAccount;
 
       if (!isVault) {
-        // Searching by account name
+        // Searching by account name - vault is optional
         vaultInfo = vaultData.rows.find(row => row.owner === searchInput);
-
-        if (!vaultInfo) {
-          setError(`No vault found for account: ${searchInput}`);
-          setIsLoading(false);
-          return;
-        }
-
         accountName = searchInput;
-        vaultAccount = vaultInfo.vault;
+        vaultAccount = vaultInfo ? vaultInfo.vault : null;
       } else {
         // Searching by vault name
         vaultInfo = vaultData.rows.find(row => row.vault === searchInput);
@@ -159,172 +180,158 @@ const VaultChecker = () => {
         vaultAccount = searchInput;
       }
 
-      // Step 2: Get the BTC address for this vault
-      const btcAddressResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: 'v.libre',
-          table: 'accounts',
-          scope: 'v.libre',
-          limit: 1,
-          json: true,
-          lower_bound: vaultAccount,
-          upper_bound: vaultAccount
-        })
-      });
+      // Step 2: Bridge deposit addresses are keyed by the OWNER account
+      // (x.libre = BTC bridge, t.libre = USDT/ETH bridge)
+      const [bridgeBtcAddress, ethAddress] = await Promise.all([
+        lookupAccountAddress(baseEndpoint.libre, 'x.libre', accountName, 'btc_address'),
+        lookupAccountAddress(baseEndpoint.libre, 't.libre', accountName, 'eth_address')
+      ]);
 
-      if (!btcAddressResponse.ok) {
-        throw new Error('Failed to fetch BTC address data');
-      }
-
-      const btcAddressData = await btcAddressResponse.json();
-      
-      if (!btcAddressData.rows || btcAddressData.rows.length === 0) {
-        setError(`No BTC address found for vault: ${vaultAccount}`);
+      if (!vaultAccount && !bridgeBtcAddress && !ethAddress) {
+        setError(`No vault or bridge addresses found for account: ${accountName}`);
         setIsLoading(false);
         return;
       }
 
-      const btcAddress = btcAddressData.rows[0].btc_address;
+      // Step 3: Vault collateral details live under the vault (.loan) account
+      // in v.libre - only fetched when the account actually has a vault
+      let vaultDetails = null;
+      if (vaultAccount) {
+        const vaultBtcAddress = await lookupAccountAddress(baseEndpoint.libre, 'v.libre', vaultAccount, 'btc_address');
 
-      // Step 3: Get the BTC balance from mempool
-      const btcBalanceResponse = await fetch(`${baseEndpoint.btc}/api/address/${btcAddress}`);
-      
-      let btcBalance = 0;
-      if (btcBalanceResponse.ok) {
-        const btcBalanceData = await btcBalanceResponse.json();
-        btcBalance = btcBalanceData.chain_stats.funded_txo_sum - btcBalanceData.chain_stats.spent_txo_sum;
-        // Convert from satoshis to BTC
-        btcBalance = btcBalance / 100000000;
-      } else {
-        console.warn('Failed to fetch BTC balance from mempool');
-      }
-
-      // Step 4: Get the CBTC balance on Libre (displayed as Collateral Balance with BTC symbol)
-      const cbtcBalanceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_currency_balance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: 'cbtc.libre',
-          account: vaultAccount,
-          symbol: 'CBTC'
-        })
-      });
-
-      let cbtcBalance = 0;
-      if (cbtcBalanceResponse.ok) {
-        const cbtcBalanceData = await cbtcBalanceResponse.json();
-        if (cbtcBalanceData && cbtcBalanceData.length > 0) {
-          cbtcBalance = parseFloat(cbtcBalanceData[0].split(' ')[0]);
-        }
-      } else {
-        console.warn('Failed to fetch CBTC balance');
-      }
-
-      // Step 5: Check if there's a loan for this account
-      const loanResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: 'loan',
-          table: 'loan',
-          scope: 'loan',
-          limit: 1000,
-          json: true
-        })
-      });
-
-      let loanInfo = null;
-      if (loanResponse.ok) {
-        const loanData = await loanResponse.json();
-        loanInfo = loanData.rows.find(row => row.account === accountName);
-      } else {
-        console.warn('Failed to fetch loan data');
-      }
-
-      // Step 6: Get BTC price from Chainlink price feed or oracle
-      const oracleCode = network === 'mainnet' || network === 'custom-libre-btc-mainnet' ? 'chainlink' : 'oracletest';
-      const btcPriceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: oracleCode,
-          table: 'feed',
-          scope: oracleCode,
-          limit: 1000,
-          json: true
-        })
-      });
-
-      let btcPrice = 0;
-      if (btcPriceResponse.ok) {
-        const btcPriceData = await btcPriceResponse.json();
-        if (btcPriceData.rows && btcPriceData.rows.length > 0) {
-          // Find the btcusd pair
-          const btcUsdPair = btcPriceData.rows.find(row => row.pair === 'btcusd');
-          if (btcUsdPair) {
-            btcPrice = parseFloat(btcUsdPair.price);
+        // BTC balance of the collateral address (from mempool)
+        let btcBalance = 0;
+        if (vaultBtcAddress) {
+          const btcBalanceResponse = await fetch(`${baseEndpoint.btc}/api/address/${vaultBtcAddress}`);
+          if (btcBalanceResponse.ok) {
+            const btcBalanceData = await btcBalanceResponse.json();
+            btcBalance = (btcBalanceData.chain_stats.funded_txo_sum - btcBalanceData.chain_stats.spent_txo_sum) / 100000000;
+          } else {
+            console.warn('Failed to fetch BTC balance from mempool');
           }
         }
-      } else {
-        console.warn(`Failed to fetch BTC price from ${oracleCode}`);
-        
-        // Fallback to oracle.libre if Chainlink fails
-        const oracleResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+
+        // CBTC (collateral) balance on Libre
+        let cbtcBalance = 0;
+        const cbtcBalanceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_currency_balance`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            code: 'oracle.libre',
-            table: 'datapoints',
-            scope: 'btc.usd',
-            limit: 1,
-            json: true,
-            reverse: true
+            code: 'cbtc.libre',
+            account: vaultAccount,
+            symbol: 'CBTC'
           })
         });
-        
-        if (oracleResponse.ok) {
-          const oracleData = await oracleResponse.json();
-          if (oracleData.rows && oracleData.rows.length > 0) {
-            btcPrice = oracleData.rows[0].median / 10000;
+        if (cbtcBalanceResponse.ok) {
+          const cbtcBalanceData = await cbtcBalanceResponse.json();
+          if (cbtcBalanceData && cbtcBalanceData.length > 0) {
+            cbtcBalance = parseFloat(cbtcBalanceData[0].split(' ')[0]);
           }
         } else {
-          console.warn('Failed to fetch BTC price from oracle.libre');
+          console.warn('Failed to fetch CBTC balance');
         }
+
+        // Loan for this account
+        const loanResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: 'loan',
+            table: 'loan',
+            scope: 'loan',
+            limit: 1000,
+            json: true
+          })
+        });
+
+        let loanInfo = null;
+        if (loanResponse.ok) {
+          const loanData = await loanResponse.json();
+          loanInfo = loanData.rows.find(row => row.account === accountName);
+        } else {
+          console.warn('Failed to fetch loan data');
+        }
+
+        // BTC price from Chainlink price feed, fallback to oracle.libre
+        const oracleCode = network === 'mainnet' || network === 'custom-libre-btc-mainnet' ? 'chainlink' : 'oracletest';
+        const btcPriceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: oracleCode,
+            table: 'feed',
+            scope: oracleCode,
+            limit: 1000,
+            json: true
+          })
+        });
+
+        let btcPrice = 0;
+        if (btcPriceResponse.ok) {
+          const btcPriceData = await btcPriceResponse.json();
+          const btcUsdPair = btcPriceData.rows?.find(row => row.pair === 'btcusd');
+          if (btcUsdPair) {
+            btcPrice = parseFloat(btcUsdPair.price);
+          }
+        } else {
+          console.warn(`Failed to fetch BTC price from ${oracleCode}`);
+
+          const oracleResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: 'oracle.libre',
+              table: 'datapoints',
+              scope: 'btc.usd',
+              limit: 1,
+              json: true,
+              reverse: true
+            })
+          });
+
+          if (oracleResponse.ok) {
+            const oracleData = await oracleResponse.json();
+            if (oracleData.rows && oracleData.rows.length > 0) {
+              btcPrice = oracleData.rows[0].median / 10000;
+            }
+          } else {
+            console.warn('Failed to fetch BTC price from oracle.libre');
+          }
+        }
+
+        // Collateral value and LTV when there's a loan
+        let collateralValue = 0;
+        let ltv = 0;
+        if (loanInfo && btcPrice > 0) {
+          collateralValue = cbtcBalance * btcPrice;
+          const outstandingAmount = parseFloat(loanInfo.outstanding_amount.split(' ')[0]);
+          if (collateralValue > 0) {
+            ltv = (outstandingAmount / collateralValue) * 100;
+          }
+        }
+
+        const vaultSyncStatus = Math.abs(btcBalance - cbtcBalance) < 0.00000001 ? "IN SYNC" : "PENDING";
+
+        vaultDetails = {
+          vault: vaultAccount,
+          vaultBtcAddress,
+          btcBalance,
+          cbtcBalance,
+          vaultSyncStatus,
+          hasLoan: !!loanInfo,
+          loanInfo,
+          collateralValue,
+          ltv,
+          btcPrice
+        };
       }
 
-      // Calculate collateral value and LTV if there's a loan
-      let collateralValue = 0;
-      let ltv = 0;
-      
-      if (loanInfo && btcPrice > 0) {
-        collateralValue = cbtcBalance * btcPrice;
-        
-        // Extract the outstanding amount
-        const outstandingAmount = parseFloat(loanInfo.outstanding_amount.split(' ')[0]);
-        
-        if (collateralValue > 0) {
-          ltv = (outstandingAmount / collateralValue) * 100;
-        }
-      }
-
-      // Determine vault sync status
-      const vaultSyncStatus = Math.abs(btcBalance - cbtcBalance) < 0.00000001 ? "IN SYNC" : "PENDING";
-
-      // Prepare the result
       setResult({
         account: accountName,
-        vault: vaultAccount,
-        btcAddress,
-        btcBalance,
-        cbtcBalance,
-        vaultSyncStatus,
-        hasLoan: !!loanInfo,
-        loanInfo,
-        collateralValue,
-        ltv,
-        btcPrice
+        bridgeBtcAddress,
+        ethAddress,
+        hasVault: !!vaultAccount,
+        ...vaultDetails
       });
 
     } catch (err) {
@@ -358,15 +365,15 @@ const VaultChecker = () => {
     <div className="container-fluid">
       <div className="d-flex justify-content-center">
         <div style={{ width: '100%' }}>
-          <h2 className="mb-4">Vault Checker</h2>
-          
+          <h2 className="mb-4">Vault &amp; Addresses</h2>
+
           <div className="alert alert-info mb-4">
             <i className="bi bi-info-circle me-2"></i>
             <div>
-              Check vault information for Libre accounts. View vault balances, sync status, loan details, and collateral values.
+              Look up any Libre account to see its bridge deposit addresses (BTC and USDT/ETH), its vault collateral address, and whether the vault is in sync — plus loan details when there is one.
               <div className="mt-3 px-3 py-2 bg-white text-info border border-info rounded">
                 <strong className="me-1">Quick tip:</strong>
-                Vault names end in `.loan`—paste one here to jump straight to its collateral and loan status overview.
+                Enter an account name (e.g. nobi) or a vault name ending in `.loan`. Accounts without a vault still show their bridge addresses.
               </div>
             </div>
           </div>
@@ -390,7 +397,7 @@ const VaultChecker = () => {
 
           <div className="card mb-4">
             <div className="card-header bg-primary text-white">
-              <h5 className="mb-0">Search Vault</h5>
+              <h5 className="mb-0">Look Up Account</h5>
             </div>
             <div className="card-body">
               <Form onSubmit={handleSubmit}>
@@ -429,7 +436,7 @@ const VaultChecker = () => {
                           Loading...
                         </>
                       ) : (
-                        'Check Vault'
+                        'Look Up'
                       )}
                     </Button>
                   </div>
@@ -448,66 +455,82 @@ const VaultChecker = () => {
 
           {result && !isLoading && (
             <>
+              {/* Addresses - shown for any account, with or without a vault */}
               <div className="card mb-4">
-                <div className="card-header bg-primary text-white">
-                  <h5 className="mb-0">Vault Information</h5>
+                <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0">Addresses</h5>
+                  <a
+                    href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.account}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white font-monospace"
+                  >
+                    {result.account}
+                  </a>
                 </div>
                 <div className="card-body">
-                  <Table striped bordered hover responsive>
+                  <Table striped bordered hover responsive className="mb-0">
                     <tbody>
                       <tr>
-                        <th style={{width: '200px'}}>Libre Account</th>
-                        <td>
-                          <a 
-                            href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.account}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary"
-                          >
-                            {result.account}
-                          </a>
+                        <th style={{width: '260px'}}>
+                          BTC Bridge Deposit
+                          <div className="text-muted small fw-normal">x.libre · account {result.account}</div>
+                        </th>
+                        <td className="font-monospace">
+                          {result.bridgeBtcAddress ? (
+                            <a
+                              href={`${getApiEndpoint().btc}/address/${result.bridgeBtcAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary"
+                            >
+                              {result.bridgeBtcAddress}
+                            </a>
+                          ) : (
+                            <span className="text-muted">Not registered</span>
+                          )}
                         </td>
                       </tr>
                       <tr>
-                        <th>Vault</th>
-                        <td>
-                          <a 
-                            href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.vault}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary"
-                          >
-                            {result.vault}
-                          </a>
+                        <th>
+                          USDT Bridge Deposit
+                          <div className="text-muted small fw-normal">t.libre · account {result.account}</div>
+                        </th>
+                        <td className="font-monospace">
+                          {result.ethAddress ? (
+                            <a
+                              href={`${getApiEndpoint().etherscan}/address/${result.ethAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary"
+                            >
+                              {result.ethAddress}
+                            </a>
+                          ) : (
+                            <span className="text-muted">Not registered</span>
+                          )}
                         </td>
                       </tr>
                       <tr>
-                        <th>BTC Address</th>
-                        <td>
-                          <a 
-                            href={`${getApiEndpoint().btc}/address/${result.btcAddress}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary"
-                          >
-                            {result.btcAddress}
-                          </a>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>BTC Balance</th>
-                        <td>{result.btcBalance.toFixed(8)} BTC</td>
-                      </tr>
-                      <tr>
-                        <th>Collateral Balance</th>
-                        <td>{result.cbtcBalance.toFixed(8)} BTC</td>
-                      </tr>
-                      <tr>
-                        <th>Vault State</th>
-                        <td>
-                          <span className={result.vaultSyncStatus === "IN SYNC" ? "text-success fw-bold" : "text-warning fw-bold"}>
-                            {result.vaultSyncStatus}
-                          </span>
+                        <th>
+                          Vault Collateral (BTC)
+                          <div className="text-muted small fw-normal">
+                            {result.hasVault ? `v.libre · vault ${result.vault}` : 'v.libre · no vault'}
+                          </div>
+                        </th>
+                        <td className="font-monospace">
+                          {result.vaultBtcAddress ? (
+                            <a
+                              href={`${getApiEndpoint().btc}/address/${result.vaultBtcAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary"
+                            >
+                              {result.vaultBtcAddress}
+                            </a>
+                          ) : (
+                            <span className="text-muted">No vault</span>
+                          )}
                         </td>
                       </tr>
                     </tbody>
@@ -515,6 +538,56 @@ const VaultChecker = () => {
                 </div>
               </div>
 
+              {!result.hasVault && (
+                <Alert variant="info" className="mb-4">
+                  This account has no vault, so there is no collateral or loan to display.
+                </Alert>
+              )}
+
+              {/* Vault balances + sync status - only when the account has a vault */}
+              {result.hasVault && (
+                <div className="card mb-4">
+                  <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 className="mb-0">Vault Status</h5>
+                    <Badge bg={result.vaultSyncStatus === "IN SYNC" ? "success" : "warning"} className="fs-6">
+                      {result.vaultSyncStatus === "IN SYNC" ? (
+                        <><i className="bi bi-check-circle me-1"></i>In Sync</>
+                      ) : (
+                        <><i className="bi bi-hourglass-split me-1"></i>Pending Sync</>
+                      )}
+                    </Badge>
+                  </div>
+                  <div className="card-body">
+                    <Table striped bordered hover responsive className="mb-0">
+                      <tbody>
+                        <tr>
+                          <th style={{width: '200px'}}>Vault</th>
+                          <td>
+                            <a
+                              href={`${network === 'mainnet' ? 'https://www.libreblocks.io' : 'https://testnet.libreblocks.io'}/account/${result.vault}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary"
+                            >
+                              {result.vault}
+                            </a>
+                          </td>
+                        </tr>
+                        <tr>
+                          <th>BTC Balance (on-chain)</th>
+                          <td>{result.btcBalance.toFixed(8)} BTC</td>
+                        </tr>
+                        <tr>
+                          <th>Collateral Balance (CBTC)</th>
+                          <td>{result.cbtcBalance.toFixed(8)} BTC</td>
+                        </tr>
+                      </tbody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {result.hasVault && (
               <div className="card">
                 <div className="card-header bg-primary text-white">
                   <h5 className="mb-0">Loan Information</h5>
@@ -564,6 +637,7 @@ const VaultChecker = () => {
                   )}
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
