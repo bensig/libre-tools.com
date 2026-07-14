@@ -106,12 +106,17 @@ function Rekey() {
           <i className="bi bi-shield-lock-fill" aria-hidden="true"></i>
           Official Libre security tool
         </span>
-        <h2 className="text-3xl font-bold">Rotate a weak account key</h2>
+        <h2 className="text-3xl font-bold">Change account key wizard</h2>
         <p className="text-muted">
           Step {stepIndex + 1} of {STEPS.length}
           {account && step !== "detect" ? ` -- ${account}` : ""}
-          {affected === true ? " (known weak key)" : ""}
         </p>
+        <Alert variant="warning" className="rekey-authenticity mt-2">
+          <i className="bi bi-shield-check" aria-hidden="true"></i>{" "}
+          This tool is only genuine at <strong>https://tools.libre.org</strong> with a valid
+          HTTPS certificate (check for the padlock in your address bar). If the address or the
+          certificate looks wrong, stop — do not enter anything.
+        </Alert>
         <div className="rekey-progress-track">
           <div
             className="rekey-progress-fill"
