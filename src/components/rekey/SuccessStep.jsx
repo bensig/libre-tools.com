@@ -100,11 +100,19 @@ export default function SuccessStep({ account, newPubKey, txids, network, apiUrl
         )}
 
         <Alert variant="danger">
-          <strong>Update your wallet app now.</strong> Your account is now controlled by the{" "}
-          <strong>new</strong> recovery phrase. Your wallet app (Bitcoin Libre, Anchor, etc.) still
-          has the <strong>old</strong> phrase, so until you <strong>import the new 12-word phrase
-          into your app</strong>, it can no longer sign for this account. Import it now, and remove
-          the old wallet once you&apos;ve confirmed the new one works.
+          <strong>Update your wallet app now.</strong> Your account is controlled by the{" "}
+          <strong>new</strong> key. Your wallet still has the <strong>old</strong> one, so it can no
+          longer sign for this account until you import the new key you saved at the generate step:
+          <ul className="mb-1 mt-1">
+            <li>
+              <strong>Bitcoin Libre app</strong> — import the new <strong>12-word phrase</strong>.
+            </li>
+            <li>
+              <strong>Anchor</strong> — import the new <strong>private key (WIF)</strong> (Anchor
+              doesn&apos;t accept phrases): Manage Wallets → Import Private Key → paste the WIF.
+            </li>
+          </ul>
+          Remove the old wallet once you&apos;ve confirmed the new one signs.
         </Alert>
 
         <Alert variant="warning">

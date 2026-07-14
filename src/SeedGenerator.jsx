@@ -7,6 +7,7 @@ function SeedGenerator() {
   const [entropy, setEntropy] = useState([]);
   const [seedPhrase, setSeedPhrase] = useState('');
   const [publicKey, setPublicKey] = useState('');
+  const [wif, setWif] = useState('');
   const [isCollecting, setIsCollecting] = useState(false);
   const [entropyBits, setEntropyBits] = useState(128);
   const [showSeed, setShowSeed] = useState(false);
@@ -150,10 +151,13 @@ function SeedGenerator() {
       
       setSeedPhrase(phrase);
       try {
-        setPublicKey(deriveLibreKeys(phrase).publicKey);
+        const k = deriveLibreKeys(phrase);
+        setPublicKey(k.publicKey);
+        setWif(k.wif);
       } catch (e) {
-        console.error('Could not derive Libre public key:', e);
+        console.error('Could not derive Libre keys:', e);
         setPublicKey('');
+        setWif('');
       }
       setShowSeed(true);
       setIsCollecting(false);
@@ -319,6 +323,19 @@ function SeedGenerator() {
                   )}
                 </Button>
               </div>
+              {wif && (
+                <div className="mt-3">
+                  <Form.Label className="mb-1">
+                    Private Key (WIF) <span className="text-muted">— secret; the form Anchor imports (Manage Wallets → Import Private Key)</span>
+                  </Form.Label>
+                  <div className="p-2 bg-light border rounded">
+                    <code className="user-select-all" style={{ wordBreak: 'break-all' }}>{wif}</code>
+                  </div>
+                  <div className="text-muted small mt-1">
+                    The Bitcoin Libre app imports the 12-word phrase above instead; Anchor uses this WIF.
+                  </div>
+                </div>
+              )}
               {publicKey && (
                 <div className="mt-3">
                   <Form.Label className="mb-1">

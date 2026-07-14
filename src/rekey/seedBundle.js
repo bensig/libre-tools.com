@@ -18,7 +18,8 @@ export function deriveLibreKeys(mnemonic) {
   // string); construct directly instead, which is equivalent.
   const priv = new PrivateKey(KeyType.K1, new Bytes(node.privateKey));
   return {
-    privateKey: priv.toString(),
+    privateKey: priv.toString(), // PVT_K1_... form
+    wif: priv.toWif(), // legacy "5..." WIF — the form Anchor imports
     publicKey: canonicalPubKey(priv.toPublic().toString()),
   };
 }

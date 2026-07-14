@@ -16,6 +16,7 @@ function bytesToHex(bytes) {
 export default function GenerateNewStep({ onGenerated, onBack }) {
   const [mnemonic, setMnemonic] = useState(null);
   const [publicKey, setPublicKey] = useState(null);
+  const [wif, setWif] = useState(null);
   const [error, setError] = useState(null);
   const [written, setWritten] = useState(false);
 
@@ -30,9 +31,10 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
       }
       crypto.getRandomValues(entropy);
       const newMnemonic = entropyToMnemonic(bytesToHex(entropy));
-      const { publicKey: pk } = deriveLibreKeys(newMnemonic);
+      const { publicKey: pk, wif: newWif } = deriveLibreKeys(newMnemonic);
       setMnemonic(newMnemonic);
       setPublicKey(pk);
+      setWif(newWif);
       setWritten(false);
     } catch (err) {
       setError(err.message);
@@ -69,8 +71,30 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
             <div className="p-3 rekey-mnemonic-box mb-3">
               <code className="user-select-all">{mnemonic}</code>
             </div>
+
+            <Alert variant="info" className="small">
+              <strong>Importing this key into your wallet:</strong>
+              <ul className="mb-1 mt-1">
+                <li>
+                  <strong>Bitcoin Libre app</strong> — import the <strong>12-word phrase</strong> above.
+                </li>
+                <li>
+                  <strong>Anchor</strong> — Anchor does <em>not</em> accept a recovery phrase; it
+                  imports a <strong>private key (WIF)</strong>. Use the private key below. In Anchor:
+                  Manage Wallets → Import Account / Import Private Key → paste the WIF.
+                </li>
+              </ul>
+            </Alert>
+
+            <div className="small mb-2">
+              <strong>Private key (WIF)</strong> — for Anchor; treat it exactly like the phrase, it
+              controls the account:
+              <div className="p-2 rekey-mnemonic-box mt-1">
+                <code className="user-select-all" style={{ wordBreak: "break-all" }}>{wif}</code>
+              </div>
+            </div>
             <div className="small text-muted mb-3">
-              New public key: <code>{publicKey}</code>
+              New public key (safe to share): <code style={{ wordBreak: "break-all" }}>{publicKey}</code>
             </div>
             <Form.Check
               type="checkbox"
