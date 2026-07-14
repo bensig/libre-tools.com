@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Button, Form, Alert } from 'react-bootstrap';
 import { WORDLIST } from './word-list';
 import { deriveLibreKeys } from './rekey/seedBundle';
+import SecretReveal from './components/SecretReveal';
 
 function SeedGenerator() {
   const [entropy, setEntropy] = useState([]);
@@ -304,33 +305,14 @@ function SeedGenerator() {
               <Alert variant="warning">
                 <strong>Important:</strong> Save this seed phrase securely. Anyone with access to it will have access to your funds!
               </Alert>
-              <div className="p-3 bg-light border rounded d-flex justify-content-between align-items-start">
-                <code className="user-select-all">{seedPhrase}</code>
-                <Button 
-                  variant={copySuccess ? "success" : "outline-secondary"}
-                  size="sm"
-                  className="ms-2"
-                  onClick={handleCopy}
-                >
-                  {copySuccess ? (
-                    <>
-                      <i className="bi bi-check"></i> Copied
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-clipboard"></i> Copy
-                    </>
-                  )}
-                </Button>
-              </div>
+              <Form.Label className="mb-1">Recovery phrase <span className="text-muted">(secret — for the Bitcoin Libre app)</span></Form.Label>
+              <SecretReveal value={seedPhrase} />
               {wif && (
                 <div className="mt-3">
                   <Form.Label className="mb-1">
                     Private Key (WIF) <span className="text-muted">— secret; the form Anchor imports (Manage Wallets → Import Private Key)</span>
                   </Form.Label>
-                  <div className="p-2 bg-light border rounded">
-                    <code className="user-select-all" style={{ wordBreak: 'break-all' }}>{wif}</code>
-                  </div>
+                  <SecretReveal value={wif} />
                   <div className="text-muted small mt-1">
                     The Bitcoin Libre app imports the 12-word phrase above instead; Anchor uses this WIF.
                   </div>

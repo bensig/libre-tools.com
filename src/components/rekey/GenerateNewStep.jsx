@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, Alert, Button, Form } from "react-bootstrap";
 import { entropyToMnemonic } from "bip39";
 import { deriveLibreKeys } from "../../rekey/seedBundle";
+import SecretReveal from "../SecretReveal";
 
 function bytesToHex(bytes) {
   return Array.from(bytes)
@@ -68,8 +69,8 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
               browser and is never sent anywhere. Anyone with access to it controls this
               account.
             </Alert>
-            <div className="p-3 rekey-mnemonic-box mb-3">
-              <code className="user-select-all">{mnemonic}</code>
+            <div className="mb-3">
+              <SecretReveal value={mnemonic} />
             </div>
 
             <Alert variant="info" className="small">
@@ -89,8 +90,8 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
             <div className="small mb-2">
               <strong>Private key (WIF)</strong> — for Anchor; treat it exactly like the phrase, it
               controls the account:
-              <div className="p-2 rekey-mnemonic-box mt-1">
-                <code className="user-select-all" style={{ wordBreak: "break-all" }}>{wif}</code>
+              <div className="mt-1">
+                <SecretReveal value={wif} />
               </div>
             </div>
             <div className="small text-muted mb-3">
