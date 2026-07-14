@@ -106,7 +106,7 @@ function Rekey() {
           <i className="bi bi-shield-lock-fill" aria-hidden="true"></i>
           Official Libre security tool
         </span>
-        <h2 className="text-3xl font-bold">Change account key</h2>
+        <h2 className="text-3xl font-bold">Change account keys</h2>
         <p className="text-muted">
           Step {stepIndex + 1} of {STEPS.length}
           {account && step !== "detect" ? ` -- ${account}` : ""}
