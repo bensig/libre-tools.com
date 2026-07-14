@@ -7,14 +7,14 @@ const Layout = ({ children }) => {
     <div className="d-flex flex-column min-vh-100">
       <Navbar bg="primary" variant="dark" expand="lg" className="mb-4">
         <Container fluid>
-          <Navbar.Brand as={Link} to="/">
+          <Navbar.Brand as={Link} to="/" className="d-flex align-items-center">
             <img
-              src="/LibreLogoWhite.png"
-              height="30"
-              className="d-inline-block align-top me-2"
-              alt="Libre logo"
+              src="/LibreLogo.png"
+              height="24"
+              className="d-inline-block me-2"
+              alt="Libre"
             />
-          Libre Tools
+            <span className="fw-medium">Tools</span>
           </Navbar.Brand>
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav">
