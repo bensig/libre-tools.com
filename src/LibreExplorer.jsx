@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { Form, Button, Alert, Spinner, Modal, Badge } from "react-bootstrap";
-import { WalletPluginBitcoinLibre } from "@libre-chain/wallet-plugin-bitcoin-libre";
-import { SessionKit } from "@wharfkit/session";
-import { WalletPluginAnchor } from "@wharfkit/wallet-plugin-anchor";
+import { createSessionKit } from "./utils/session";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WebRenderer } from "@wharfkit/web-renderer";
 import { isCurrencyStatsTable, formatScopeDisplay } from './utils/symbolCodec';
 
 const LibreExplorer = () => {
@@ -1462,17 +1459,7 @@ const LibreExplorer = () => {
       setIsConnecting(true);
       setShowWalletModal(false);
       
-      const sessionKitArgs = {
-        appName: "Libre Explorer",
-        chains: [{
-          id: chainId,
-          url: getApiEndpoint()
-        }],
-        ui: new WebRenderer(),
-        walletPlugins: [new WalletPluginBitcoinLibre(), new WalletPluginAnchor()]
-      };
-
-      const sessionKit = new SessionKit(sessionKitArgs);
+      const sessionKit = createSessionKit({ chainId, apiUrl: getApiEndpoint() });
       const { session } = await sessionKit.login({
         walletPlugin: type,
       });
@@ -1493,16 +1480,7 @@ const LibreExplorer = () => {
   const disconnectWallet = async () => {
     if (walletSession) {
       try {
-        const sessionKitArgs = {
-          appName: "Libre Explorer",
-          chains: [{
-            id: chainId,
-            url: getApiEndpoint()
-          }],
-          walletPlugins: [new WalletPluginBitcoinLibre(), new WalletPluginAnchor()]
-        };
-        
-        const sessionKit = new SessionKit(sessionKitArgs);
+        const sessionKit = createSessionKit({ chainId, apiUrl: getApiEndpoint() });
         await sessionKit.logout(walletSession);
       } catch (error) {
         console.error('Error disconnecting wallet:', error);
