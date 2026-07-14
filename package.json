@@ -7,17 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@libre-chain/wallet-plugin-bitcoin-libre": "^1.4.0",
     "@popperjs/core": "^2.11.8",
+    "@scure/bip32": "^2.2.0",
     "@wharfkit/antelope": "^1.0.13",
     "@wharfkit/session": "^1.4.0",
     "@wharfkit/wallet-plugin-anchor": "^1.4.0",
     "@wharfkit/web-renderer": "^1.4.1",
     "bip39": "^3.1.0",
     "bootstrap": "^5.3.3",
+    "buffer": "^6.0.3",
     "netlify-cli": "^23.10.0",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.7",
@@ -34,6 +38,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^4.1.10"
   }
 }

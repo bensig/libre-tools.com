@@ -1,0 +1,4 @@
+{
+  "_note": "Placeholder affected-set for /rekey. Populate `hashes` with the real server-published SHA-256 hashes of Ill-Bloom-affected public keys (see src/rekey/affectedSet.js hashPubKey) before relying on this for detection.",
+  "hashes": []
+}
