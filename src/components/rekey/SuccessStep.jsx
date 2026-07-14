@@ -1,4 +1,6 @@
-import { Card, Alert, ListGroup } from "react-bootstrap";
+import { useState, useEffect } from "react";
+import { Card, Alert, ListGroup, Button, Spinner } from "react-bootstrap";
+import { getAccountKeys } from "../../rekey/accountKeys";
 
 const EXPLORER_BASE = {
   mainnet: "https://www.libreblocks.io",
@@ -8,20 +10,79 @@ const EXPLORER_BASE = {
 // Same Bitcoin Libre mobile app link used elsewhere in this app (LibreExplorer.jsx).
 const BITCOIN_LIBRE_APP_URL = "https://bitcoinlibre.io/";
 
-export default function SuccessStep({ account, newPubKey, txids, network }) {
+export default function SuccessStep({ account, newPubKey, txids, network, apiUrl }) {
   const explorerBase = EXPLORER_BASE[network] || EXPLORER_BASE.mainnet;
+  const [status, setStatus] = useState("checking"); // checking | confirmed | pending
+
+  const verifyOnce = async () => {
+    try {
+      const keys = await getAccountKeys(apiUrl, account);
+      return keys.owner === newPubKey && keys.active === newPubKey;
+    } catch {
+      return false;
+    }
+  };
+
+  const manualCheck = async () => {
+    setStatus("checking");
+    setStatus((await verifyOnce()) ? "confirmed" : "pending");
+  };
+
+  // Auto-poll on mount: nodes behind the load balancer reflect a just-applied
+  // block at slightly different times, so a single immediate read can miss it.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 8 && !cancelled; i++) {
+        if (await verifyOnce()) {
+          if (!cancelled) setStatus("confirmed");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!cancelled) setStatus("pending");
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiUrl, account, newPubKey]);
 
   return (
     <Card className="rekey-card">
       <Card.Body>
-        <Card.Title>Your account has been re-keyed</Card.Title>
-        <Alert variant="success">
-          Both the <strong>owner</strong> and <strong>active</strong> permissions on{" "}
-          <strong>{account}</strong> now point to your new key:
-          <div className="mt-2">
-            <code className="user-select-all">{newPubKey}</code>
-          </div>
-        </Alert>
+        <Card.Title>Your account keys have been changed</Card.Title>
+
+        {status === "confirmed" && (
+          <Alert variant="success">
+            <i className="bi bi-check-circle-fill" aria-hidden="true"></i>{" "}
+            <strong>Confirmed on-chain.</strong> Both the <strong>owner</strong> and{" "}
+            <strong>active</strong> permissions on <strong>{account}</strong> now use your new key:
+            <div className="mt-2">
+              <code className="user-select-all">{newPubKey}</code>
+            </div>
+          </Alert>
+        )}
+
+        {status === "checking" && (
+          <Alert variant="info" className="d-flex align-items-center gap-2">
+            <Spinner size="sm" /> Confirming the change on-chain…
+          </Alert>
+        )}
+
+        {status === "pending" && (
+          <Alert variant="warning">
+            <strong>Your transaction was submitted.</strong> The change hasn&apos;t appeared on a
+            queried node yet — this is normal load-balancer lag and almost always resolves within a
+            few seconds. Your account is being re-keyed to:
+            <div className="my-2">
+              <code className="user-select-all">{newPubKey}</code>
+            </div>
+            <Button variant="outline-primary" size="sm" onClick={manualCheck}>
+              Check on-chain again
+            </Button>
+          </Alert>
+        )}
 
         {txids.length > 0 && (
           <div className="mb-3">
@@ -37,6 +98,14 @@ export default function SuccessStep({ account, newPubKey, txids, network }) {
             </ListGroup>
           </div>
         )}
+
+        <Alert variant="danger">
+          <strong>Update your wallet app now.</strong> Your account is now controlled by the{" "}
+          <strong>new</strong> recovery phrase. Your wallet app (Bitcoin Libre, Anchor, etc.) still
+          has the <strong>old</strong> phrase, so until you <strong>import the new 12-word phrase
+          into your app</strong>, it can no longer sign for this account. Import it now, and remove
+          the old wallet once you&apos;ve confirmed the new one works.
+        </Alert>
 
         <Alert variant="warning">
           <strong>This only secures your Libre account -- not native Bitcoin.</strong> This web

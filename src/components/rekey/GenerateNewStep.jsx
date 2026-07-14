@@ -22,7 +22,7 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
   const generate = () => {
     setError(null);
     try {
-      const entropy = new Uint8Array(32); // 256 bits of entropy -> 24-word mnemonic
+      const entropy = new Uint8Array(16); // 128 bits of entropy -> 12-word mnemonic (Bitcoin Libre supports 12 words)
       if (!globalThis.crypto || typeof crypto.getRandomValues !== "function") {
         throw new Error(
           "Secure random generator unavailable. Open this page over HTTPS (or localhost) and try again — do not proceed."
@@ -49,7 +49,7 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
           <>
             <Alert variant="light" className="border small">
               <i className="bi bi-shield-lock" aria-hidden="true"></i>{" "}
-              <strong>How this is generated:</strong> your new 24-word phrase comes from 256 bits
+              <strong>How this is generated:</strong> your new 12-word phrase comes from 128 bits
               of entropy produced by your browser&apos;s secure random generator (Web Crypto
               <code> crypto.getRandomValues</code>) — never <code>Math.random</code> or any
               predictable source. It is created entirely on this device and is never transmitted.

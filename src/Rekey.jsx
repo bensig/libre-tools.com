@@ -180,6 +180,7 @@ function Rekey() {
           newPubKey={newPubKey}
           txids={txids}
           network={network}
+          apiUrl={apiUrl}
         />
       )}
     </div>

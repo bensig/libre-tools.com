@@ -76,15 +76,22 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
     }
   };
 
-  const verifyRotated = async (expectedPubKey, { owner = true, active = true } = {}) => {
-    const keys = await getAccountKeys(apiUrl, account);
-    if (owner && keys.owner !== expectedPubKey) {
-      throw new Error("Verification failed: owner permission does not show the new key yet.");
+  // Poll get_account until the expected key shows on the requested permissions,
+  // or give up after ~20s. NEVER throws on read lag (load-balanced nodes reflect a
+  // just-applied block at slightly different times); returns true/false.
+  const pollVerify = async (expectedPubKey, { owner = true, active = true } = {}, attempts = 10, delayMs = 2000) => {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const keys = await getAccountKeys(apiUrl, account);
+        const ownerOk = !owner || keys.owner === expectedPubKey;
+        const activeOk = !active || keys.active === expectedPubKey;
+        if (ownerOk && activeOk) return true;
+      } catch {
+        /* transient read error -- keep polling */
+      }
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
     }
-    if (active && keys.active !== expectedPubKey) {
-      throw new Error("Verification failed: active permission does not show the new key yet.");
-    }
-    return keys;
+    return false;
   };
 
   const runPathA = async () => {
@@ -93,8 +100,10 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
     try {
       const { txid } = await executeRekeyOneTx(session, account, newPubKey);
       addTxid(txid);
-      setPhase("verifying");
-      await verifyRotated(newPubKey);
+      // The tx was accepted -> the rotation is on-chain. Advance to the result
+      // screen immediately; it verifies on-chain itself (with retries + a manual
+      // re-check). We must NOT bounce back to the sign step on read lag, or the
+      // user may re-sign an already-rotated account.
       onSuccess({ session, txids: txidsRef.current });
     } catch (err) {
       setError(err.message);
@@ -108,7 +117,16 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
     try {
       const { txid } = await executeRekeyActiveThenChallenge(session, account, newPubKey);
       addTxid(txid);
-      await verifyRotated(newPubKey, { owner: false, active: true });
+      setPhase("verifying");
+      // The challenge step signs AS the new active key, so active MUST reflect the
+      // new key before we continue. Poll (don't single-read); if it never confirms,
+      // let the user retry the check rather than re-signing.
+      const ok = await pollVerify(newPubKey, { owner: false, active: true });
+      if (!ok) {
+        throw new Error(
+          "The active permission hasn't shown the new key yet (network lag). Wait a few seconds and press Continue again -- do NOT re-sign from the start."
+        );
+      }
       setPhase("awaiting-challenge");
     } catch (err) {
       setError(err.message);
@@ -162,9 +180,7 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
       setPhase("signing");
       const { txid: ownerTxid } = await executeRekeyOwner(session, account, newPubKey);
       addTxid(ownerTxid);
-
-      setPhase("verifying");
-      await verifyRotated(newPubKey);
+      // Both perms submitted -> advance to the result screen, which verifies on-chain.
       onSuccess({ session, txids: txidsRef.current });
     } catch (err) {
       setError(err.message);
