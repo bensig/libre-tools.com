@@ -175,7 +175,7 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
   const busy = ["connecting", "signing", "challenging", "verifying"].includes(phase);
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 5: Connect your wallet and sign</Card.Title>
 

@@ -2,12 +2,12 @@ import { Card, Row, Col, Button } from "react-bootstrap";
 
 export default function ChoosePathStep({ onChoose }) {
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 3: Choose how to get your new key</Card.Title>
         <Row className="g-3 mt-2">
           <Col md={6}>
-            <Card className="h-100">
+            <Card className="h-100 rekey-subcard">
               <Card.Body className="d-flex flex-column">
                 <Card.Title>Path A -- Generate here (recommended)</Card.Title>
                 <Card.Text>
@@ -23,7 +23,7 @@ export default function ChoosePathStep({ onChoose }) {
             </Card>
           </Col>
           <Col md={6}>
-            <Card className="h-100">
+            <Card className="h-100 rekey-subcard">
               <Card.Body className="d-flex flex-column">
                 <Card.Title>Path B -- Paste a key from Anchor / hardware wallet</Card.Title>
                 <Card.Text>

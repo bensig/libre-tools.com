@@ -1,0 +1,267 @@
+/*
+ * Design tokens for the /rekey security wizard.
+ *
+ * This is a hidden, trust-critical page (account key rotation) that must read as an
+ * official Libre property. Rather than inventing a new palette, these tokens pull
+ * from two places:
+ *
+ *  1. This app's own brand blue (#0053E6), already used site-wide for the Navbar in
+ *     src/components/Layout.jsx and defined as the primary accent in src/index.css
+ *     (--primary-glow). Using it here keeps /rekey visually identical to every other
+ *     tools.libre.org page's header/footer/nav chrome, which already wraps this page.
+ *  2. The elevated "security surface" treatment (soft shadow, generous radius,
+ *     restrained ink/line grays) used by libre-tech/accounts.libre.org's
+ *     styles/globals.css (--brand: #1b0aae, --card-shadow, --border-radius: 12px) and
+ *     libre-tech/libre-lending's Tailwind theme (--primary: hsl(220 100% 45%), a blue
+ *     in the same family, --radius: 0.5rem). Both sibling Libre properties favor a
+ *     bold blue primary action, a white card floated on a light-gray shell with a
+ *     soft shadow, and no heavy borders -- that's the visual language reproduced below,
+ *     just tuned to this app's existing #0053E6 blue instead of introducing a fourth
+ *     off-brand shade.
+ *
+ * Font stack matches src/index.css's --font-family (Inter, sans-serif), already
+ * loaded for the whole app -- no new font is introduced.
+ *
+ * All classes below are prefixed `.rekey-` and only ever applied inside src/Rekey.jsx
+ * and src/components/rekey/*.jsx, so nothing here leaks onto Home/Explorer/other tools.
+ */
+
+.rekey-page {
+  --rekey-primary: #0053e6; /* tools.libre.org navbar blue (src/components/Layout.jsx) */
+  --rekey-primary-dark: #003fad; /* darkened for hover/active, same hue */
+  --rekey-primary-tint: #eaf1ff; /* light wash for badges/callouts */
+  --rekey-shell-bg: #f5f5f7; /* accounts.libre.org --shell-bg family */
+  --rekey-card-bg: #ffffff;
+  --rekey-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px -16px rgba(0, 40, 120, 0.18);
+  --rekey-radius: 12px; /* accounts.libre.org --border-radius */
+  --rekey-radius-sm: 8px;
+  --rekey-ink: #16181d;
+  --rekey-ink-2: #5b6270;
+  --rekey-ink-3: #8a8f99;
+  --rekey-line: #e3e6ec;
+  --rekey-ok: #1e8e4a;
+  --rekey-warn: #b45f06;
+  --rekey-err: #c5221f;
+  --rekey-font: Inter, sans-serif; /* src/index.css --font-family */
+
+  font-family: var(--rekey-font);
+  color: var(--rekey-ink);
+  background: var(--rekey-shell-bg);
+  border-radius: var(--rekey-radius);
+  padding: 1.75rem clamp(1rem, 4vw, 2.5rem) 2.5rem;
+}
+
+/* Header / trust banner */
+
+.rekey-header {
+  margin-bottom: 1.75rem;
+}
+
+.rekey-header .rekey-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--rekey-primary-tint);
+  color: var(--rekey-primary-dark);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+
+.rekey-header h2 {
+  font-weight: 700;
+  color: var(--rekey-ink);
+  letter-spacing: -0.01em;
+}
+
+.rekey-header .text-muted {
+  color: var(--rekey-ink-2) !important;
+}
+
+.rekey-header .rekey-orig-key {
+  color: var(--rekey-ink-3) !important;
+}
+
+/* Step progress bar (purely decorative; derived from existing stepIndex/STEPS.length,
+   no new state introduced). */
+
+.rekey-progress-track {
+  width: 100%;
+  max-width: 420px;
+  height: 6px;
+  background: var(--rekey-line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.6rem;
+}
+
+.rekey-progress-fill {
+  height: 100%;
+  background: var(--rekey-primary);
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+
+/* Cards */
+
+.rekey-card {
+  background: var(--rekey-card-bg);
+  border: 1px solid var(--rekey-line);
+  border-radius: var(--rekey-radius);
+  box-shadow: var(--rekey-card-shadow);
+}
+
+.rekey-card .card-body {
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.rekey-card .card-title,
+.rekey-card .card-title.h5 {
+  font-weight: 700;
+  color: var(--rekey-ink);
+  font-size: 1.15rem;
+  margin-bottom: 0.85rem;
+}
+
+.rekey-subcard {
+  border: 1px solid var(--rekey-line);
+  border-radius: var(--rekey-radius-sm);
+  box-shadow: none;
+  background: var(--rekey-card-bg);
+}
+
+.rekey-subcard .card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--rekey-ink);
+}
+
+/* Buttons -- match the bold blue primary action used across accounts.libre.org /
+   libre-lending, tuned to this app's own blue. */
+
+.rekey-page .btn-primary {
+  background-color: var(--rekey-primary);
+  border-color: var(--rekey-primary);
+  font-weight: 600;
+  border-radius: var(--rekey-radius-sm);
+}
+
+.rekey-page .btn-primary:hover,
+.rekey-page .btn-primary:focus,
+.rekey-page .btn-primary:active {
+  background-color: var(--rekey-primary-dark) !important;
+  border-color: var(--rekey-primary-dark) !important;
+}
+
+.rekey-page .btn-primary:disabled {
+  background-color: var(--rekey-primary);
+  border-color: var(--rekey-primary);
+  opacity: 0.55;
+}
+
+.rekey-page .btn-outline-primary {
+  color: var(--rekey-primary);
+  border-color: var(--rekey-primary);
+  font-weight: 600;
+  border-radius: var(--rekey-radius-sm);
+}
+
+.rekey-page .btn-outline-primary:hover,
+.rekey-page .btn-outline-primary:focus,
+.rekey-page .btn-outline-primary:active {
+  background-color: var(--rekey-primary) !important;
+  border-color: var(--rekey-primary) !important;
+}
+
+.rekey-page .btn-outline-secondary,
+.rekey-page .btn-link {
+  border-radius: var(--rekey-radius-sm);
+  color: var(--rekey-ink-2);
+}
+
+.rekey-page .btn-link {
+  border: none;
+  text-decoration: underline;
+}
+
+/* Form controls */
+
+.rekey-page .form-control:focus {
+  border-color: var(--rekey-primary);
+  box-shadow: 0 0 0 0.2rem var(--rekey-primary-tint);
+}
+
+.rekey-page .form-label {
+  font-weight: 600;
+  color: var(--rekey-ink-2);
+  font-size: 0.9rem;
+}
+
+/* Alerts -- keep bootstrap semantics (success/warning/danger/info) but tone them to
+   the same restrained ink/line palette instead of stock bootstrap pastel. */
+
+.rekey-page .alert {
+  border-radius: var(--rekey-radius-sm);
+  border: 1px solid transparent;
+}
+
+.rekey-page .alert-warning {
+  background-color: #fff6e8;
+  border-color: #f4d9a6;
+  color: var(--rekey-warn);
+}
+
+.rekey-page .alert-danger {
+  background-color: #fdecea;
+  border-color: #f3b7b2;
+  color: var(--rekey-err);
+}
+
+.rekey-page .alert-success {
+  background-color: #e9f7ee;
+  border-color: #a9dcbc;
+  color: var(--rekey-ok);
+}
+
+.rekey-page .alert-info {
+  background-color: var(--rekey-primary-tint);
+  border-color: #b9d2fb;
+  color: var(--rekey-primary-dark);
+}
+
+/* Code / key display */
+
+.rekey-page code {
+  background: var(--rekey-shell-bg);
+  border: 1px solid var(--rekey-line);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  color: var(--rekey-ink);
+  word-break: break-all;
+}
+
+.rekey-mnemonic-box {
+  background: var(--rekey-shell-bg);
+  border: 1px solid var(--rekey-line);
+  border-radius: var(--rekey-radius-sm);
+}
+
+.rekey-mnemonic-box code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.rekey-page .list-group-item {
+  border-color: var(--rekey-line);
+}
+
+.rekey-page .list-group-item a {
+  color: var(--rekey-primary);
+}

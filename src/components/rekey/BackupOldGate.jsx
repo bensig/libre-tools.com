@@ -10,7 +10,7 @@ export default function BackupOldGate({ account, onContinue }) {
   const [checked, setChecked] = useState(false);
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 2: Back up your current recovery phrase</Card.Title>
         <Alert variant="warning">

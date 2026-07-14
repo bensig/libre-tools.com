@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Alert, Spinner } from "react-bootstrap";
+import "./components/rekey/rekey.css";
 import DetectStep from "./components/rekey/DetectStep";
 import BackupOldGate from "./components/rekey/BackupOldGate";
 import ChoosePathStep from "./components/rekey/ChoosePathStep";
@@ -99,16 +100,26 @@ function Rekey() {
   };
 
   return (
-    <div>
-      <div className="mb-4">
+    <div className="rekey-page">
+      <div className="rekey-header mb-4">
+        <span className="rekey-badge">
+          <i className="bi bi-shield-lock-fill" aria-hidden="true"></i>
+          Official Libre security tool
+        </span>
         <h2 className="text-3xl font-bold">Rotate a weak account key</h2>
         <p className="text-muted">
           Step {stepIndex + 1} of {STEPS.length}
           {account && step !== "detect" ? ` -- ${account}` : ""}
           {affected === true ? " (known weak key)" : ""}
         </p>
+        <div className="rekey-progress-track">
+          <div
+            className="rekey-progress-fill"
+            style={{ width: `${((stepIndex + 1) / STEPS.length) * 100}%` }}
+          />
+        </div>
         {currentKeys && step !== "detect" && step !== "success" && (
-          <p className="small text-muted">
+          <p className="small rekey-orig-key mt-2">
             Original active key: <code>{currentKeys.active}</code>
           </p>
         )}

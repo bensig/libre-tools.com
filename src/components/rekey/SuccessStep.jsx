@@ -12,7 +12,7 @@ export default function SuccessStep({ account, newPubKey, txids, network }) {
   const explorerBase = EXPLORER_BASE[network] || EXPLORER_BASE.mainnet;
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Your account has been re-keyed</Card.Title>
         <Alert variant="success">

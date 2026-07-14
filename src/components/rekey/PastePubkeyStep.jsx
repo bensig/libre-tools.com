@@ -22,7 +22,7 @@ export default function PastePubkeyStep({ onSet, onBack }) {
   };
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 4: Paste your new public key</Card.Title>
         <Alert variant="warning">

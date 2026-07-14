@@ -51,7 +51,7 @@ export default function DetectStep({ apiUrl, affectedSetUrl, initialAccount, onC
   }, []);
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 1: Look up your account</Card.Title>
         <p>

@@ -35,7 +35,7 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
   };
 
   return (
-    <Card>
+    <Card className="rekey-card">
       <Card.Body>
         <Card.Title>Step 4: Generate your new key</Card.Title>
         {error && <Alert variant="danger">{error}</Alert>}
@@ -52,7 +52,7 @@ export default function GenerateNewStep({ onGenerated, onBack }) {
               browser and is never sent anywhere. Anyone with access to it controls this
               account.
             </Alert>
-            <div className="p-3 bg-light border rounded mb-3">
+            <div className="p-3 rekey-mnemonic-box mb-3">
               <code className="user-select-all">{mnemonic}</code>
             </div>
             <div className="small text-muted mb-3">
