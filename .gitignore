@@ -24,3 +24,6 @@ dist-ssr
 *.sln
 *.sw?
 .playwright-mcp/
+
+# subagent-driven-development scratch/ledger
+.superpowers/
