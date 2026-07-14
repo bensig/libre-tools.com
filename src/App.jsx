@@ -10,6 +10,7 @@ import LoanTracker from './LoanTracker';
 import VaultChecker from './VaultChecker';
 import DexAnalysis from './DexAnalysis';
 import AccountLookup from './AccountLookup';
+import Rekey from './Rekey';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
                 <Route path="/account" element={<AccountLookup />} />
                 <Route path="/account/:network" element={<AccountLookup />} />
                 <Route path="/account/:network/:query" element={<AccountLookup />} />
+                <Route path="/rekey" element={<Rekey />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
