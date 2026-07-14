@@ -44,7 +44,7 @@ It already has the hard, sensitive part built and working: `SessionKit` + `Walle
 ## Data flow
 
 1. User opens `/rekey` (optionally `?account=`).
-2. Read `get_account` (reuse the explorer's chain client) → current owner/active pubkey → `isAffected`. Not affected → say so, stop.
+2. Read `get_account` (reuse the explorer's chain client) → current owner/active pubkey. **Anyone may rotate — no affected-set gate.** Require only that it's a single-key account (multisig → out of scope, use manual flow). Detection (`isAffected`) is an OPTIONAL, non-blocking "your current key looks weak" note, never a gate. (Product decision 2026-07-13: re-keying is harmless regardless of key strength, and gating would require publishing the hashed weak-account set — mild attacker aid — for no safety benefit.)
 3. **Back up current phrase gate (required):** before anything is rotated, the user must confirm they have their **current/old recovery phrase written down**. Until the rotation fully completes and verifies, the old key is the only recovery path if a step fails (especially Path B, where active is rotated before owner). The web tool has no seed access, so this is a confirmation checkpoint — it cannot display or store the old phrase; it tells the user where to find it (Bitcoin Libre app / Anchor) and requires an explicit "I have it backed up" before continuing.
 4. Choose Path A (generate + back up new phrase) or B (paste pubkey).
 5. Connect wallet via existing SessionKit login (Anchor or Bitcoin Libre).

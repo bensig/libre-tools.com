@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Button, Form, Alert } from 'react-bootstrap';
 import { WORDLIST } from './word-list';
+import { deriveLibreKeys } from './rekey/seedBundle';
 
 function SeedGenerator() {
   const [entropy, setEntropy] = useState([]);
   const [seedPhrase, setSeedPhrase] = useState('');
+  const [publicKey, setPublicKey] = useState('');
   const [isCollecting, setIsCollecting] = useState(false);
   const [entropyBits, setEntropyBits] = useState(128);
   const [showSeed, setShowSeed] = useState(false);
@@ -147,6 +149,12 @@ function SeedGenerator() {
       console.log('Generated phrase length:', phrase.length); // Debug log
       
       setSeedPhrase(phrase);
+      try {
+        setPublicKey(deriveLibreKeys(phrase).publicKey);
+      } catch (e) {
+        console.error('Could not derive Libre public key:', e);
+        setPublicKey('');
+      }
       setShowSeed(true);
       setIsCollecting(false);
       setError('');
@@ -311,9 +319,19 @@ function SeedGenerator() {
                   )}
                 </Button>
               </div>
-              <Button 
-                variant="primary" 
-                onClick={startCollection} 
+              {publicKey && (
+                <div className="mt-3">
+                  <Form.Label className="mb-1">
+                    Libre Public Key <span className="text-muted">(safe to share — e.g. paste into the re-key tool)</span>
+                  </Form.Label>
+                  <div className="p-2 bg-light border rounded">
+                    <code className="user-select-all" style={{ wordBreak: 'break-all' }}>{publicKey}</code>
+                  </div>
+                </div>
+              )}
+              <Button
+                variant="primary"
+                onClick={startCollection}
                 className="mt-3"
               >
                 Generate New Seed

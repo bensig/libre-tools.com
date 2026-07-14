@@ -149,7 +149,7 @@ function Rekey() {
       )}
 
       {step === "paste" && (
-        <PastePubkeyStep onSet={handlePasted} onBack={() => setStep("choosePath")} />
+        <PastePubkeyStep onSet={handlePasted} onBack={() => setStep("choosePath")} currentKeys={currentKeys} />
       )}
 
       {step === "connectSign" && chainId && (
