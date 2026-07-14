@@ -1,38 +1,18 @@
 import { buildRekeyActions, updateauthAction } from "./rekeyActions";
 
-// --- Owner-authorization wrinkle -------------------------------------------------
+// --- Owner-authorization ---------------------------------------------------------
 //
-// updateauth on the `owner` permission must itself be authorized by `owner`
-// (an account can never re-key its own owner permission using a lower
-// permission). `rekeyActions.js` already builds each action with an explicit
+// updateauth on the `owner` permission must itself be authorized by `owner`.
+// `rekeyActions.js` builds each action with an explicit
 // `authorization: [{ actor: account, permission: "owner" }]`, and that is what
 // this module submits.
 //
-// UNVERIFIED ON LIVE CHAIN: WharfKit's `session.transact()` has been observed
-// (in other integrations) to override an action's `authorization` with the
-// session's own `permissionLevel` (normally `<actor>@active`, set at login)
-// rather than honoring the explicit `owner` authorization baked into the
-// action data. Whether that happens with this WharfKit version + the
-// Bitcoin-Libre / Anchor wallet plugins used here has NOT been confirmed --
-// there is no live testnet/wallet available in this environment. A human
-// must verify this on testnet per task-5-brief.md Step 5 before this path
-// ships:
-//
-//   - If `session.transact({ actions })` preserves the explicit
-//     `owner` authorization on each action (as constructed here), no
-//     change is needed -- this is the code path that should ship.
-//   - If WharfKit overrides the authorization with the session's
-//     permissionLevel, the fix is to log the session in at the `owner`
-//     permission level instead of the default `active`, e.g.:
-//       sessionKit.login({ walletPlugin, permissionLevel: "owner" })
-//     This is valid for Ill-Bloom accounts because owner == active == the
-//     same (weak) key being rotated, so the wallet can sign as `owner`.
-//     After that change, the actions below can keep their explicit
-//     `owner` authorization (harmless/no-op) or it can be dropped, since
-//     the session-level permission would already be `owner`.
-//
-// Do not change this comment to claim testnet verification happened until
-// Step 5 of task-5-brief.md has actually been run against testnet.libre.org.
+// VERIFIED ON TESTNET (2026-07-13): `session.transact({ actions })` HONORS the
+// explicit `owner` authorization baked into each action even when the session
+// logged in at the default `active` permission level. Confirmed by rotating a
+// throwaway testnet account (helloworld) via this exact path with a WharfKit
+// session — both owner+active updated in one tx. No `permissionLevel: "owner"`
+// login override is needed; the code below ships as-is.
 
 // Path A: both updateauth actions (active + owner) in ONE transaction,
 // authorized by account@owner.
