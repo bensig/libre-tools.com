@@ -28,6 +28,7 @@ const Layout = ({ children }) => {
               <Nav.Link as={Link} to="/vault" className="fs-6">Vault</Nav.Link>
               <Nav.Link as={Link} to="/seed-generator" className="fs-6">Seed</Nav.Link>
               <Nav.Link as={Link} to="/multisig" className="fs-6">Multisig</Nav.Link>
+              <Nav.Link as={Link} to="/rekey" className="fs-6">Rekey</Nav.Link>
             </Nav>
           </Navbar.Collapse>
         </Container>
