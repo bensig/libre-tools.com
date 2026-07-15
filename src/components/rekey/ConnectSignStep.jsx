@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Card, Button, Alert, Spinner, Modal } from "react-bootstrap";
+import { Card, Button, Alert, Spinner, Modal, Form } from "react-bootstrap";
 import { createSessionKit } from "../../utils/session";
 import { getAccountKeys } from "../../rekey/accountKeys";
 import {
@@ -41,10 +41,15 @@ function WalletChoiceModal({ show, onHide, onChoose, busy }) {
 // to prove control of the NEW key with a challenge transaction, THEN rotate owner
 // (executeRekeyOwner). This order protects against a typo'd pubkey permanently
 // locking the account out of owner.
-export default function ConnectSignStep({ apiUrl, chainId, account, path, newPubKey, onSuccess }) {
+export default function ConnectSignStep({ apiUrl, chainId, account, path, network, newPubKey, onSuccess }) {
   const [session, setSession] = useState(null);
   const [phase, setPhase] = useState("idle"); // idle | connecting | connected | signing | awaiting-challenge | challenging | verifying
   const [error, setError] = useState(null);
+  // Mainnet safety gate: rotating a real account is irreversible, so require an
+  // explicit acknowledgement before the sign button is enabled. Testnet skips it.
+  const isMainnet = network === "mainnet";
+  const [mainnetConfirmed, setMainnetConfirmed] = useState(false);
+  const signBlocked = isMainnet && !mainnetConfirmed;
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [txids, setTxids] = useState([]);
@@ -225,12 +230,27 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, newPub
             <Alert variant="success">
               Connected as <strong>{session?.actor?.toString()}</strong>.
             </Alert>
+            {isMainnet && (
+              <Form.Check
+                type="checkbox"
+                id="mainnet-rekey-confirm"
+                className="mb-3"
+                checked={mainnetConfirmed}
+                onChange={(e) => setMainnetConfirmed(e.target.checked)}
+                label={
+                  <span>
+                    I understand this rotates the keys of the <strong>real MAINNET</strong> account{" "}
+                    <strong>{account}</strong>, it cannot be undone, and I have saved the new key.
+                  </span>
+                }
+              />
+            )}
             {path === "A" ? (
-              <Button variant="primary" onClick={runPathA}>
+              <Button variant="primary" onClick={runPathA} disabled={signBlocked}>
                 Sign: rotate owner + active
               </Button>
             ) : (
-              <Button variant="primary" onClick={runPathBStep1}>
+              <Button variant="primary" onClick={runPathBStep1} disabled={signBlocked}>
                 Sign: rotate active permission
               </Button>
             )}

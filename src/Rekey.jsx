@@ -111,18 +111,44 @@ function Rekey() {
           Step {stepIndex + 1} of {STEPS.length}
           {account && step !== "detect" ? ` -- ${account}` : ""}
         </p>
-        <Alert variant="warning" className="rekey-authenticity mt-2">
-          <i className="bi bi-shield-check" aria-hidden="true"></i>{" "}
-          This tool is only genuine at <strong>https://tools.libre.org/rekey</strong> with a valid
-          HTTPS certificate (check for the padlock in your address bar). If the address or the
-          certificate looks wrong, stop — do not enter anything.
-        </Alert>
-        <Alert variant="danger" className="rekey-hygiene mt-2">
-          <i className="bi bi-incognito" aria-hidden="true"></i>{" "}
-          Before you reveal or type a recovery phrase, protect it from browser extensions: open this
-          page in a <strong>private / incognito window</strong> (extensions are off there by default),
-          or disable all extensions first. A malicious extension can read your seed phrase straight
-          off the screen.
+        <Alert variant="light" className="rekey-precheck mt-2">
+          <div className="rekey-precheck-title">
+            <i className="bi bi-shield-lock-fill" aria-hidden="true"></i> Before you use this page
+          </div>
+          <ul className="rekey-precheck-list">
+            <li>
+              <i className="bi bi-lock-fill" aria-hidden="true"></i>
+              <span>
+                Check the address — genuine only at <strong>https://tools.libre.org/rekey</strong>{" "}
+                with a valid HTTPS padlock. If it looks wrong, stop.
+              </span>
+            </li>
+            <li>
+              <i className="bi bi-incognito" aria-hidden="true"></i>
+              <span>
+                Open in a <strong>private / incognito window</strong> (or disable extensions) before
+                revealing a recovery phrase — a malicious extension can read it off the screen.
+              </span>
+            </li>
+            <li>
+              <i className={`bi ${network === "mainnet" ? "bi-hdd-network-fill" : "bi-hdd-network"}`} aria-hidden="true"></i>
+              <span>
+                {network === "mainnet" ? (
+                  <>
+                    Network: <strong>Mainnet</strong> — key changes are real and permanent.
+                  </>
+                ) : (
+                  <>
+                    Network: <strong>Testnet</strong> — safe to practice.
+                  </>
+                )}
+              </span>
+            </li>
+            <li>
+              <i className="bi bi-key-fill" aria-hidden="true"></i>
+              <span>Save your new key — if you lose it, you lose access to the account.</span>
+            </li>
+          </ul>
         </Alert>
         <div className="rekey-progress-track">
           <div
@@ -170,6 +196,7 @@ function Rekey() {
           chainId={chainId}
           account={account}
           path={path}
+          network={network}
           newPubKey={newPubKey}
           onSuccess={handleRekeySuccess}
         />
