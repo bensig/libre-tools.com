@@ -117,6 +117,13 @@ function Rekey() {
           HTTPS certificate (check for the padlock in your address bar). If the address or the
           certificate looks wrong, stop — do not enter anything.
         </Alert>
+        <Alert variant="danger" className="rekey-hygiene mt-2">
+          <i className="bi bi-incognito" aria-hidden="true"></i>{" "}
+          Before you reveal or type a recovery phrase, protect it from browser extensions: open this
+          page in a <strong>private / incognito window</strong> (extensions are off there by default),
+          or disable all extensions first. A malicious extension can read your seed phrase straight
+          off the screen.
+        </Alert>
         <div className="rekey-progress-track">
           <div
             className="rekey-progress-fill"
