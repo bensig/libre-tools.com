@@ -43,6 +43,11 @@ const Home = () => {
       description: 'Generate a 128-bit or 256-bit seed phrase by moving your mouse to create entropy.'
     },
     {
+      title: 'Change Account Keys (Rekey)',
+      path: '/rekey',
+      description: 'Rotate an account’s owner and active keys to a new key, signing with your existing Anchor or Bitcoin Libre wallet. For accounts created on older app versions with a weak recovery phrase — generates a new key (seed + WIF) and updates the account on-chain.'
+    },
+    {
       title: 'Multisig Proposal Viewer',
       path: '/multisig',
       description: 'Browse and inspect multisig proposals on the Libre blockchain. View requested signatures and confirmations.'

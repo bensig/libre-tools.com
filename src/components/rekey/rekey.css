@@ -265,3 +265,39 @@
 .rekey-page .list-group-item a {
   color: var(--rekey-primary);
 }
+
+/* Consolidated "Before you use this page" pre-flight checklist (replaces the
+   previous stack of separate authenticity/hygiene/network alert blocks). */
+.rekey-precheck {
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+}
+.rekey-precheck-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.rekey-precheck-title .bi {
+  color: #6c757d;
+  margin-right: 0.4rem;
+}
+.rekey-precheck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.rekey-precheck-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #495057;
+}
+.rekey-precheck-list li > .bi {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: #6c757d;
+}

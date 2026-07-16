@@ -111,18 +111,11 @@ function Rekey() {
           Step {stepIndex + 1} of {STEPS.length}
           {account && step !== "detect" ? ` -- ${account}` : ""}
         </p>
-        <Alert variant="warning" className="rekey-authenticity mt-2">
-          <i className="bi bi-shield-check" aria-hidden="true"></i>{" "}
-          This tool is only genuine at <strong>https://tools.libre.org/rekey</strong> with a valid
-          HTTPS certificate (check for the padlock in your address bar). If the address or the
-          certificate looks wrong, stop — do not enter anything.
-        </Alert>
-        <Alert variant="danger" className="rekey-hygiene mt-2">
-          <i className="bi bi-incognito" aria-hidden="true"></i>{" "}
-          Before you reveal or type a recovery phrase, protect it from browser extensions: open this
-          page in a <strong>private / incognito window</strong> (extensions are off there by default),
-          or disable all extensions first. A malicious extension can read your seed phrase straight
-          off the screen.
+        <Alert variant="light" className="rekey-precheck mt-2">
+          <i className="bi bi-shield-lock-fill me-2" aria-hidden="true"></i>
+          This is the official Libre security tool — genuine only at{" "}
+          <strong>https://tools.libre.org/rekey</strong> with a valid HTTPS padlock. If the address
+          looks wrong, stop and don&apos;t enter anything.
         </Alert>
         <div className="rekey-progress-track">
           <div
@@ -152,7 +145,9 @@ function Rekey() {
         />
       )}
 
-      {step === "backupOld" && <BackupOldGate account={account} onContinue={handleBackupConfirmed} />}
+      {step === "backupOld" && (
+        <BackupOldGate account={account} network={network} onContinue={handleBackupConfirmed} />
+      )}
 
       {step === "choosePath" && <ChoosePathStep onChoose={handleChoosePath} />}
 
@@ -170,6 +165,7 @@ function Rekey() {
           chainId={chainId}
           account={account}
           path={path}
+          network={network}
           newPubKey={newPubKey}
           onSuccess={handleRekeySuccess}
         />
