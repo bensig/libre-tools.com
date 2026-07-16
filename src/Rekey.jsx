@@ -112,43 +112,10 @@ function Rekey() {
           {account && step !== "detect" ? ` -- ${account}` : ""}
         </p>
         <Alert variant="light" className="rekey-precheck mt-2">
-          <div className="rekey-precheck-title">
-            <i className="bi bi-shield-lock-fill" aria-hidden="true"></i> Before you use this page
-          </div>
-          <ul className="rekey-precheck-list">
-            <li>
-              <i className="bi bi-lock-fill" aria-hidden="true"></i>
-              <span>
-                Check the address — genuine only at <strong>https://tools.libre.org/rekey</strong>{" "}
-                with a valid HTTPS padlock. If it looks wrong, stop.
-              </span>
-            </li>
-            <li>
-              <i className="bi bi-incognito" aria-hidden="true"></i>
-              <span>
-                Open in a <strong>private / incognito window</strong> (or disable extensions) before
-                revealing a recovery phrase — a malicious extension can read it off the screen.
-              </span>
-            </li>
-            <li>
-              <i className={`bi ${network === "mainnet" ? "bi-hdd-network-fill" : "bi-hdd-network"}`} aria-hidden="true"></i>
-              <span>
-                {network === "mainnet" ? (
-                  <>
-                    Network: <strong>Mainnet</strong> — key changes are real and permanent.
-                  </>
-                ) : (
-                  <>
-                    Network: <strong>Testnet</strong> — safe to practice.
-                  </>
-                )}
-              </span>
-            </li>
-            <li>
-              <i className="bi bi-key-fill" aria-hidden="true"></i>
-              <span>Save your new key — if you lose it, you lose access to the account.</span>
-            </li>
-          </ul>
+          <i className="bi bi-shield-lock-fill me-2" aria-hidden="true"></i>
+          This is the official Libre security tool — genuine only at{" "}
+          <strong>https://tools.libre.org/rekey</strong> with a valid HTTPS padlock. If the address
+          looks wrong, stop and don&apos;t enter anything.
         </Alert>
         <div className="rekey-progress-track">
           <div
@@ -178,7 +145,9 @@ function Rekey() {
         />
       )}
 
-      {step === "backupOld" && <BackupOldGate account={account} onContinue={handleBackupConfirmed} />}
+      {step === "backupOld" && (
+        <BackupOldGate account={account} network={network} onContinue={handleBackupConfirmed} />
+      )}
 
       {step === "choosePath" && <ChoosePathStep onChoose={handleChoosePath} />}
 
