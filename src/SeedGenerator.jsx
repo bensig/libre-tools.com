@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, Button, Form, Alert } from 'react-bootstrap';
 import { WORDLIST } from './word-list';
 import { deriveLibreKeys } from './rekey/seedBundle';
@@ -13,8 +13,6 @@ function SeedGenerator() {
   const [entropyBits, setEntropyBits] = useState(128);
   const [showSeed, setShowSeed] = useState(false);
   const [error, setError] = useState('');
-  const [copySuccess, setCopySuccess] = useState(false);
-  const timeoutRef = useRef(null);
   
   // Calculate required entropy points based on entropy bits
   const requiredEntropyPoints = useMemo(() => {
@@ -178,20 +176,6 @@ function SeedGenerator() {
     setError('');
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(seedPhrase)
-      .then(() => {
-        setCopySuccess(true);
-        timeoutRef.current = setTimeout(() => {
-          setCopySuccess(false);
-        }, 2000);
-      })
-      .catch(err => {
-        console.error('Failed to copy: ', err);
-        setError('Failed to copy to clipboard');
-      });
-  };
-
   useEffect(() => {
     // Only add event listeners when actively collecting and haven't reached the goal
     if (isCollecting && entropy.length < requiredEntropyPoints) {
@@ -207,14 +191,6 @@ function SeedGenerator() {
       };
     }
   }, [isCollecting, entropy.length, requiredEntropyPoints]); // Re-run effect when collection state changes
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div 
@@ -249,6 +225,17 @@ function SeedGenerator() {
               <option value={128}>128 bits (12 words)</option>
               <option value={256}>256 bits (24 words)</option>
             </Form.Select>
+            {entropyBits === 256 ? (
+              <div className="text-danger small mt-1">
+                <i className="bi bi-exclamation-triangle-fill me-1"></i>
+                <strong>24-word phrases do NOT import into the Bitcoin Libre app.</strong> Only
+                12-word phrases work there; a 24-word seed is usable only via Anchor (import the WIF below).
+              </div>
+            ) : (
+              <div className="text-muted small mt-1">
+                Bitcoin Libre only supports 12-word recovery phrases.
+              </div>
+            )}
           </Form.Group>
 
           {error && (
@@ -305,7 +292,9 @@ function SeedGenerator() {
               <Alert variant="warning">
                 <strong>Important:</strong> Save this seed phrase securely. Anyone with access to it will have access to your funds!
               </Alert>
-              <Form.Label className="mb-1">Recovery phrase <span className="text-muted">(secret — for the Bitcoin Libre app)</span></Form.Label>
+              <Form.Label className="mb-1">Recovery phrase {entropyBits === 128
+                ? <span className="text-muted">(secret — for the Bitcoin Libre app)</span>
+                : <span className="text-danger">(secret — 24 words: Anchor/WIF only, NOT the Bitcoin Libre app)</span>}</Form.Label>
               <SecretReveal value={seedPhrase} />
               {wif && (
                 <div className="mt-3">
