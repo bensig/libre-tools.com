@@ -41,7 +41,7 @@ function WalletChoiceModal({ show, onHide, onChoose, busy }) {
 // to prove control of the NEW key with a challenge transaction, THEN rotate owner
 // (executeRekeyOwner). This order protects against a typo'd pubkey permanently
 // locking the account out of owner.
-export default function ConnectSignStep({ apiUrl, chainId, account, path, network, newPubKey, onSuccess }) {
+export default function ConnectSignStep({ apiUrl, chainId, account, txStrategy, network, newPubKey, onSuccess }) {
   const [session, setSession] = useState(null);
   const [phase, setPhase] = useState("idle"); // idle | connecting | connected | signing | awaiting-challenge | challenging | verifying
   const [error, setError] = useState(null);
@@ -193,6 +193,19 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, networ
     }
   };
 
+  const runOwnerOnly = async () => {
+    setPhase("signing");
+    setError(null);
+    try {
+      const { txid } = await executeRekeyOwner(session, account, newPubKey);
+      addTxid(txid);
+      onSuccess({ session, txids: txidsRef.current });
+    } catch (err) {
+      setError(err.message);
+      setPhase("connected");
+    }
+  };
+
   const busy = ["connecting", "signing", "challenging", "verifying"].includes(phase);
 
   return (
@@ -208,6 +221,14 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, networ
 
         {phase === "idle" && (
           <>
+            {txStrategy === "ownerOnly" && (
+              <Alert variant="warning">
+                Connect the wallet holding the <strong>OLD owner key</strong> for {account}. Owner
+                can only be changed by owner itself — your new active key will be rejected. If you no
+                longer have the old key, owner cannot be changed.
+                {/* Task 0 = Candidate 2 ONLY: add "Bitcoin Libre Wallet cannot sign this; use Anchor + old WIF." */}
+              </Alert>
+            )}
             <p>
               Connect the wallet that currently controls <strong>{account}</strong> to sign the
               rotation.
@@ -245,13 +266,17 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, networ
                 }
               />
             )}
-            {path === "A" ? (
+            {txStrategy === "oneTx" ? (
               <Button variant="primary" onClick={runPathA} disabled={signBlocked}>
                 Sign: rotate owner + active
               </Button>
-            ) : (
+            ) : txStrategy === "staged" ? (
               <Button variant="primary" onClick={runPathBStep1} disabled={signBlocked}>
                 Sign: rotate active permission
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={runOwnerOnly} disabled={signBlocked}>
+                Sign: rotate owner permission
               </Button>
             )}
           </>

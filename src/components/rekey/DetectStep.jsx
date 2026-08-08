@@ -10,7 +10,7 @@ import { fetchAffectedSet, isAffected } from "../../rekey/affectedSet";
 //
 // The affected-set check is kept as a best-effort, non-blocking informational note
 // only (it never prevents Continue, and a failed fetch is silently ignored).
-export default function DetectStep({ apiUrl, affectedSetUrl, initialAccount, onContinue }) {
+export default function DetectStep({ apiUrl, affectedSetUrl, initialAccount, onContinue, onFinishOwner }) {
   const [account, setAccount] = useState(initialAccount || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -104,6 +104,20 @@ export default function DetectStep({ apiUrl, affectedSetUrl, initialAccount, onC
             >
               Continue: rotate this account&apos;s keys
             </Button>
+
+            {result.currentKeys.owner !== result.currentKeys.active && (
+              <Alert variant="warning" className="mt-3">
+                <strong>Owner and active keys differ.</strong> If you meant to rotate both and only
+                active went through, finish rotating owner now. This requires signing with your{" "}
+                <strong>old owner key</strong> — the new active key cannot change owner.
+                <div className="mt-2">
+                  <Button variant="warning" size="sm"
+                    onClick={() => onFinishOwner(account, result.currentKeys)}>
+                    Finish owner rotation
+                  </Button>
+                </div>
+              </Alert>
+            )}
           </div>
         )}
       </Card.Body>

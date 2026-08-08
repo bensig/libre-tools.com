@@ -38,7 +38,7 @@ function Rekey() {
   const [account, setAccount] = useState(initialAccount);
   const [currentKeys, setCurrentKeys] = useState(null);
   const [affected, setAffected] = useState(null);
-  const [path, setPath] = useState(null);
+  const [txStrategy, setTxStrategy] = useState(null); // "oneTx" | "staged" | "ownerOnly"
   const [newPubKey, setNewPubKey] = useState(null);
   // Held per spec (client-side only, Path A) but intentionally not re-rendered
   // anywhere after GenerateNewStep -- we don't want a second on-screen copy of a
@@ -78,7 +78,7 @@ function Rekey() {
   const handleBackupConfirmed = () => setStep("choosePath");
 
   const handleChoosePath = (chosenPath) => {
-    setPath(chosenPath);
+    setTxStrategy(chosenPath === "A" ? "oneTx" : "staged");
     setStep(chosenPath === "A" ? "generate" : "paste");
   };
 
@@ -90,6 +90,14 @@ function Rekey() {
 
   const handlePasted = (pubKey) => {
     setNewPubKey(pubKey);
+    setStep("connectSign");
+  };
+
+  const handleFinishOwner = (acct, keys) => {
+    setAccount(acct);
+    setCurrentKeys(keys);
+    setNewPubKey(keys.active); // owner will be set to the existing active key
+    setTxStrategy("ownerOnly");
     setStep("connectSign");
   };
 
@@ -142,6 +150,7 @@ function Rekey() {
           affectedSetUrl={AFFECTED_SET_URL}
           initialAccount={initialAccount}
           onContinue={handleDetected}
+          onFinishOwner={handleFinishOwner}
         />
       )}
 
@@ -164,7 +173,7 @@ function Rekey() {
           apiUrl={apiUrl}
           chainId={chainId}
           account={account}
-          path={path}
+          txStrategy={txStrategy}
           network={network}
           newPubKey={newPubKey}
           onSuccess={handleRekeySuccess}
@@ -184,6 +193,7 @@ function Rekey() {
           txids={txids}
           network={network}
           apiUrl={apiUrl}
+          onFinishOwner={() => handleFinishOwner(account, { ...currentKeys, active: newPubKey })}
         />
       )}
     </div>
