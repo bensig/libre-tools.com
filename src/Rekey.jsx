@@ -39,6 +39,7 @@ function Rekey() {
   const [currentKeys, setCurrentKeys] = useState(null);
   const [affected, setAffected] = useState(null);
   const [path, setPath] = useState(null);
+  const [txStrategy, setTxStrategy] = useState(null); // "oneTx" | "staged" | "ownerOnly"
   const [newPubKey, setNewPubKey] = useState(null);
   // Held per spec (client-side only, Path A) but intentionally not re-rendered
   // anywhere after GenerateNewStep -- we don't want a second on-screen copy of a
@@ -79,6 +80,7 @@ function Rekey() {
 
   const handleChoosePath = (chosenPath) => {
     setPath(chosenPath);
+    setTxStrategy(chosenPath === "A" ? "oneTx" : "staged");
     setStep(chosenPath === "A" ? "generate" : "paste");
   };
 
@@ -164,7 +166,7 @@ function Rekey() {
           apiUrl={apiUrl}
           chainId={chainId}
           account={account}
-          path={path}
+          txStrategy={txStrategy}
           network={network}
           newPubKey={newPubKey}
           onSuccess={handleRekeySuccess}

@@ -41,7 +41,7 @@ function WalletChoiceModal({ show, onHide, onChoose, busy }) {
 // to prove control of the NEW key with a challenge transaction, THEN rotate owner
 // (executeRekeyOwner). This order protects against a typo'd pubkey permanently
 // locking the account out of owner.
-export default function ConnectSignStep({ apiUrl, chainId, account, path, network, newPubKey, onSuccess }) {
+export default function ConnectSignStep({ apiUrl, chainId, account, txStrategy, network, newPubKey, onSuccess }) {
   const [session, setSession] = useState(null);
   const [phase, setPhase] = useState("idle"); // idle | connecting | connected | signing | awaiting-challenge | challenging | verifying
   const [error, setError] = useState(null);
@@ -193,6 +193,9 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, networ
     }
   };
 
+  // TODO(task 5): implement owner-only signing; remove this stub once runOwnerOnly lands.
+  const runOwnerOnly = async () => {};
+
   const busy = ["connecting", "signing", "challenging", "verifying"].includes(phase);
 
   return (
@@ -245,13 +248,17 @@ export default function ConnectSignStep({ apiUrl, chainId, account, path, networ
                 }
               />
             )}
-            {path === "A" ? (
+            {txStrategy === "oneTx" ? (
               <Button variant="primary" onClick={runPathA} disabled={signBlocked}>
                 Sign: rotate owner + active
               </Button>
-            ) : (
+            ) : txStrategy === "staged" ? (
               <Button variant="primary" onClick={runPathBStep1} disabled={signBlocked}>
                 Sign: rotate active permission
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={runOwnerOnly} disabled={signBlocked}>
+                Sign: rotate owner permission
               </Button>
             )}
           </>
