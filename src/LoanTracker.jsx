@@ -324,9 +324,9 @@ const LoanTracker = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          code: network === 'mainnet' ? 'chainlink' : 'oracletest',
-          table: 'feed',
-          scope: network === 'mainnet' ? 'chainlink' : 'oracletest',
+          code: 'oracle',
+          table: 'aggfeeds',
+          scope: 'oracle',
           limit: 1000,
           json: true
         })

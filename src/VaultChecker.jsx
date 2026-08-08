@@ -252,14 +252,14 @@ const VaultChecker = () => {
           console.warn('Failed to fetch loan data');
         }
 
-        // BTC price from Chainlink price feed, fallback to oracle.libre
-        const oracleCode = network === 'mainnet' || network === 'custom-libre-btc-mainnet' ? 'chainlink' : 'oracletest';
+        // BTC price from the oracle aggfeeds price feed, fallback to oracle.libre
+        const oracleCode = 'oracle';
         const btcPriceResponse = await fetch(`${baseEndpoint.libre}/v1/chain/get_table_rows`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             code: oracleCode,
-            table: 'feed',
+            table: 'aggfeeds',
             scope: oracleCode,
             limit: 1000,
             json: true
