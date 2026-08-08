@@ -95,6 +95,14 @@ function Rekey() {
     setStep("connectSign");
   };
 
+  const handleFinishOwner = (acct, keys) => {
+    setAccount(acct);
+    setCurrentKeys(keys);
+    setNewPubKey(keys.active); // owner will be set to the existing active key
+    setTxStrategy("ownerOnly");
+    setStep("connectSign");
+  };
+
   const handleRekeySuccess = ({ session: finalSession, txids: finalTxids }) => {
     setSession(finalSession);
     setTxids(finalTxids);
@@ -144,6 +152,7 @@ function Rekey() {
           affectedSetUrl={AFFECTED_SET_URL}
           initialAccount={initialAccount}
           onContinue={handleDetected}
+          onFinishOwner={handleFinishOwner}
         />
       )}
 
@@ -186,6 +195,7 @@ function Rekey() {
           txids={txids}
           network={network}
           apiUrl={apiUrl}
+          onFinishOwner={() => handleFinishOwner(account, currentKeys)}
         />
       )}
     </div>

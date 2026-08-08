@@ -193,8 +193,18 @@ export default function ConnectSignStep({ apiUrl, chainId, account, txStrategy, 
     }
   };
 
-  // TODO(task 5): implement owner-only signing; remove this stub once runOwnerOnly lands.
-  const runOwnerOnly = async () => {};
+  const runOwnerOnly = async () => {
+    setPhase("signing");
+    setError(null);
+    try {
+      const { txid } = await executeRekeyOwner(session, account, newPubKey);
+      addTxid(txid);
+      onSuccess({ session, txids: txidsRef.current });
+    } catch (err) {
+      setError(err.message);
+      setPhase("connected");
+    }
+  };
 
   const busy = ["connecting", "signing", "challenging", "verifying"].includes(phase);
 
@@ -211,6 +221,14 @@ export default function ConnectSignStep({ apiUrl, chainId, account, txStrategy, 
 
         {phase === "idle" && (
           <>
+            {txStrategy === "ownerOnly" && (
+              <Alert variant="warning">
+                Connect the wallet holding the <strong>OLD owner key</strong> for {account}. Owner
+                can only be changed by owner itself — your new active key will be rejected. If you no
+                longer have the old key, owner cannot be changed.
+                {/* Task 0 = Candidate 2 ONLY: add "Bitcoin Libre Wallet cannot sign this; use Anchor + old WIF." */}
+              </Alert>
+            )}
             <p>
               Connect the wallet that currently controls <strong>{account}</strong> to sign the
               rotation.
