@@ -38,7 +38,6 @@ function Rekey() {
   const [account, setAccount] = useState(initialAccount);
   const [currentKeys, setCurrentKeys] = useState(null);
   const [affected, setAffected] = useState(null);
-  const [path, setPath] = useState(null);
   const [txStrategy, setTxStrategy] = useState(null); // "oneTx" | "staged" | "ownerOnly"
   const [newPubKey, setNewPubKey] = useState(null);
   // Held per spec (client-side only, Path A) but intentionally not re-rendered
@@ -79,7 +78,6 @@ function Rekey() {
   const handleBackupConfirmed = () => setStep("choosePath");
 
   const handleChoosePath = (chosenPath) => {
-    setPath(chosenPath);
     setTxStrategy(chosenPath === "A" ? "oneTx" : "staged");
     setStep(chosenPath === "A" ? "generate" : "paste");
   };

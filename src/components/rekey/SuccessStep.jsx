@@ -38,20 +38,25 @@ export default function SuccessStep({
 
   // Auto-poll on mount: nodes behind the load balancer reflect a just-applied
   // block at slightly different times, so a single immediate read can miss it.
-  // Only "incomplete" is worth retrying -- "confirmed" and "owner-missing" are
-  // both terminal (owner-missing will not self-resolve).
+  // Keep retrying through both "incomplete" and "owner-missing" -- for the
+  // ownerOnly resume flow and Path B step 3, the owner rotation is its own
+  // just-submitted tx and active is already the new key, so a lagging read of
+  // that fresh owner tx looks exactly like "owner-missing" until it catches
+  // up. Only "confirmed" is truly terminal; if the whole window elapses still
+  // showing "owner-missing", that's the genuine stripped-owner case (Path A).
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let lastResult = "incomplete";
       for (let i = 0; i < 8 && !cancelled; i++) {
-        const result = await classify();
-        if (result !== "incomplete") {
-          if (!cancelled) setStatus(result);
+        lastResult = await classify();
+        if (lastResult === "confirmed") {
+          if (!cancelled) setStatus(lastResult);
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      if (!cancelled) setStatus("incomplete");
+      if (!cancelled) setStatus(lastResult);
     })();
     return () => {
       cancelled = true;
@@ -63,7 +68,11 @@ export default function SuccessStep({
     <Card className="rekey-card">
       <Card.Body>
         <Card.Title>
-          {status === "confirmed" ? "Your account keys have been changed" : "Finishing your key rotation"}
+          {status === "confirmed"
+            ? "Your account keys have been changed"
+            : status === "owner-missing"
+              ? "Owner key still needs rotating"
+              : "Finishing your key rotation"}
         </Card.Title>
 
         {status === "confirmed" && (
@@ -104,9 +113,12 @@ export default function SuccessStep({
             <strong>active</strong> key was changed, but <strong>owner</strong> still holds the
             OLD key. Anyone who has the old owner key can reset your account. You must finish
             rotating owner.
-            <div className="mt-2">
+            <div className="mt-2 d-flex gap-2">
               <Button variant="danger" size="sm" onClick={onFinishOwner}>
                 Finish owner rotation
+              </Button>
+              <Button variant="outline-secondary" size="sm" onClick={manualCheck}>
+                Check on-chain again
               </Button>
             </div>
             {/* Task 0 = Candidate 2 ONLY — append: */}
