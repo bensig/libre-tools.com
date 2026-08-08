@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, Alert, ListGroup, Button, Spinner } from "react-bootstrap";
 import { getAccountKeys } from "../../rekey/accountKeys";
+import { rotationStatus } from "../../rekey/rotationState";
 
 const EXPLORER_BASE = {
   mainnet: "https://www.libreblocks.io",
@@ -10,37 +11,47 @@ const EXPLORER_BASE = {
 // Same Bitcoin Libre mobile app link used elsewhere in this app (LibreExplorer.jsx).
 const BITCOIN_LIBRE_APP_URL = "https://bitcoinlibre.io/";
 
-export default function SuccessStep({ account, newPubKey, txids, network, apiUrl }) {
+export default function SuccessStep({
+  account,
+  newPubKey,
+  txids,
+  network,
+  apiUrl,
+  onFinishOwner,
+}) {
   const explorerBase = EXPLORER_BASE[network] || EXPLORER_BASE.mainnet;
-  const [status, setStatus] = useState("checking"); // checking | confirmed | pending
+  const [status, setStatus] = useState("checking"); // checking | confirmed | owner-missing | incomplete
 
-  const verifyOnce = async () => {
+  const classify = async () => {
     try {
       const keys = await getAccountKeys(apiUrl, account);
-      return keys.owner === newPubKey && keys.active === newPubKey;
+      return rotationStatus(keys, newPubKey);
     } catch {
-      return false;
+      return "incomplete";
     }
   };
 
   const manualCheck = async () => {
     setStatus("checking");
-    setStatus((await verifyOnce()) ? "confirmed" : "pending");
+    setStatus(await classify());
   };
 
   // Auto-poll on mount: nodes behind the load balancer reflect a just-applied
   // block at slightly different times, so a single immediate read can miss it.
+  // Only "incomplete" is worth retrying -- "confirmed" and "owner-missing" are
+  // both terminal (owner-missing will not self-resolve).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       for (let i = 0; i < 8 && !cancelled; i++) {
-        if (await verifyOnce()) {
-          if (!cancelled) setStatus("confirmed");
+        const result = await classify();
+        if (result !== "incomplete") {
+          if (!cancelled) setStatus(result);
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      if (!cancelled) setStatus("pending");
+      if (!cancelled) setStatus("incomplete");
     })();
     return () => {
       cancelled = true;
@@ -51,7 +62,9 @@ export default function SuccessStep({ account, newPubKey, txids, network, apiUrl
   return (
     <Card className="rekey-card">
       <Card.Body>
-        <Card.Title>Your account keys have been changed</Card.Title>
+        <Card.Title>
+          {status === "confirmed" ? "Your account keys have been changed" : "Finishing your key rotation"}
+        </Card.Title>
 
         {status === "confirmed" && (
           <Alert variant="success">
@@ -70,7 +83,7 @@ export default function SuccessStep({ account, newPubKey, txids, network, apiUrl
           </Alert>
         )}
 
-        {status === "pending" && (
+        {status === "incomplete" && (
           <Alert variant="warning">
             <strong>Your transaction was submitted.</strong> The change hasn&apos;t appeared on a
             queried node yet — this is normal load-balancer lag and almost always resolves within a
@@ -81,6 +94,24 @@ export default function SuccessStep({ account, newPubKey, txids, network, apiUrl
             <Button variant="outline-primary" size="sm" onClick={manualCheck}>
               Check on-chain again
             </Button>
+          </Alert>
+        )}
+
+        {status === "owner-missing" && (
+          <Alert variant="danger">
+            <i className="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>{" "}
+            <strong>Owner NOT rotated — your account is only half-secured.</strong> Your{" "}
+            <strong>active</strong> key was changed, but <strong>owner</strong> still holds the
+            OLD key. Anyone who has the old owner key can reset your account. You must finish
+            rotating owner.
+            <div className="mt-2">
+              <Button variant="danger" size="sm" onClick={onFinishOwner}>
+                Finish owner rotation
+              </Button>
+            </div>
+            {/* Task 0 = Candidate 2 ONLY — append: */}
+            {/* <div className="small mt-2">Bitcoin Libre Wallet cannot sign an owner change.
+                Finish this step in <strong>Anchor</strong> using your OLD private key (WIF).</div> */}
           </Alert>
         )}
 
