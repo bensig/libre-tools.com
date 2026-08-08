@@ -195,7 +195,7 @@ function Rekey() {
           txids={txids}
           network={network}
           apiUrl={apiUrl}
-          onFinishOwner={() => handleFinishOwner(account, currentKeys)}
+          onFinishOwner={() => handleFinishOwner(account, { ...currentKeys, active: newPubKey })}
         />
       )}
     </div>
