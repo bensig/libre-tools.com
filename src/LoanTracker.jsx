@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Table, Alert, Spinner, Dropdown, Badge } from "react-bootstrap";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -6,20 +6,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 const LoanTracker = () => {
   const { network: urlNetwork, view: urlView } = useParams();
   const navigate = useNavigate();
-  const initialized = useRef(false);
 
   const NETWORK_ENDPOINTS = {
     mainnet: 'https://lb.libre.org',
     testnet: 'https://testnet.libre.org',
   };
 
-  const [network, setNetwork] = useState('mainnet');
+  const [network, setNetwork] = useState(() =>
+    urlNetwork === 'testnet' ? 'testnet' : 'mainnet'
+  );
   const [customEndpoint, setCustomEndpoint] = useState('');
   const [activeLoans, setActiveLoans] = useState([]);
   const [completedLoans, setCompletedLoans] = useState([]);
   const [activeLiquidations, setActiveLiquidations] = useState([]);
   const [completedLiquidations, setCompletedLiquidations] = useState([]);
-  const [view, setView] = useState('active');
+  const [view, setView] = useState(() =>
+    urlView === 'completed' || urlView === 'liquidations' ? urlView : 'active'
+  );
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [poolStats, setPoolStats] = useState({
@@ -125,18 +128,6 @@ const LoanTracker = () => {
   };
 
   useEffect(() => {
-    if (!initialized.current) {
-      if (urlNetwork && (urlNetwork === 'mainnet' || urlNetwork === 'testnet')) {
-        setNetwork(urlNetwork);
-      }
-      if (urlView && (urlView === 'active' || urlView === 'completed' || urlView === 'liquidations')) {
-        setView(urlView);
-      }
-      initialized.current = true;
-    }
-  }, [urlNetwork, urlView]);
-
-  useEffect(() => {
     if (network === 'mainnet' || network === 'testnet') {
       navigate(`/loans/${network}/${view}`);
     }
@@ -173,12 +164,12 @@ const LoanTracker = () => {
       return acc;
     }, { available: 0, outstanding: 0 });
 
-    setPoolStats({
+    return {
       total: totals.available + totals.outstanding,
       available: totals.available,
       utilized: totals.outstanding,
       pools
-    });
+    };
   };
 
   const fetchLoans = async (scope) => {
@@ -409,6 +400,10 @@ const LoanTracker = () => {
   };
 
   useEffect(() => {
+    // Guard against a superseded run (network switched mid-flight) writing
+    // another network's data into state after this effect is cleaned up.
+    let cancelled = false;
+
     const loadData = async () => {
       try {
         setIsLoading(true);
@@ -416,9 +411,9 @@ const LoanTracker = () => {
 
         // Fetch all data in parallel
         const [
-          active, 
-          completed, 
-          activeLiq, 
+          active,
+          completed,
+          activeLiq,
           completedLiq,
           vaults,
           btcPriceData
@@ -430,11 +425,12 @@ const LoanTracker = () => {
           fetchVaultAccounts(),
           fetchBTCPrice()
         ]);
-        
+        if (cancelled) return;
+
         // Filter active loans by status
         const activeLoans = active.filter(loan => loan.status < 4);
         const completedLoans = [...completed, ...active.filter(loan => loan.status >= 4)];
-        
+
         setActiveLoans(activeLoans);
         setCompletedLoans(completedLoans);
         setActiveLiquidations(activeLiq);
@@ -444,7 +440,8 @@ const LoanTracker = () => {
 
         // Fetch all vault addresses in one request
         const allVaultAddresses = await fetchAllVaultAddresses();
-        
+        if (cancelled) return;
+
         // Map owner accounts to their bitcoin addresses
         const ownerAddresses = {};
         Object.entries(vaults).forEach(([owner, vault]) => {
@@ -453,31 +450,36 @@ const LoanTracker = () => {
           }
         });
         setVaultAddresses(ownerAddresses);
-        
+
         // Only fetch balances for active loans (not all vaults)
         const balances = {};
         if (activeLoans.length > 0) {
           // Get unique vault accounts from active loans only
           const activeVaultAccounts = [...new Set(activeLoans.map(loan => vaults[loan.account]).filter(Boolean))];
-          
+
           await Promise.all(
             activeVaultAccounts.map(async (vault) => {
               balances[vault] = await fetchVaultBalance(vault);
             })
           );
         }
+        if (cancelled) return;
         setVaultBalances(balances);
 
-        await fetchPoolStats();
+        const stats = await fetchPoolStats();
+        if (cancelled) return;
+        setPoolStats(stats);
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading data:', error);
         setError('Failed to load data. ' + error.message);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     loadData();
+    return () => { cancelled = true; };
   }, [network, customEndpoint]);
 
   const handleViewChange = (newView) => {
