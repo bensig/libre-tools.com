@@ -14,8 +14,8 @@ import SuccessStep from "./components/rekey/SuccessStep";
 // since this is a standalone hidden wizard page, not wired into the explorer's
 // NetworkSelector/routing.
 const NETWORK_ENDPOINTS = {
-  mainnet: "https://lb.libre.org",
-  testnet: "https://testnet.libre.org",
+  mainnet: "https://api.libre.org",
+  testnet: "https://testnet-api.libre.org",
 };
 
 // Server-published hashed affected-set (see src/rekey/affectedSet.js). Served as a

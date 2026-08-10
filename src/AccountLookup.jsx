@@ -5,14 +5,14 @@ import { useParams, useNavigate } from "react-router-dom";
 const NETWORK_CONFIG = {
   mainnet: {
     label: "Mainnet",
-    api: "https://lb.libre.org",
-    hyperion: "https://api.libre.iad.cryptobloks.io",
+    api: "https://api.libre.org",
+    hyperion: "https://api.libre.org",
     explorer: "https://www.libreblocks.io",
   },
   testnet: {
     label: "Testnet",
-    api: "https://testnet.libre.org",
-    hyperion: "https://api.testnet.libre.iad.cryptobloks.io",
+    api: "https://testnet-api.libre.org",
+    hyperion: "https://testnet-api.libre.org",
     explorer: "https://testnet.libreblocks.io",
   },
 };

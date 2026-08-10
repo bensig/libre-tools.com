@@ -38,12 +38,12 @@ const VaultChecker = () => {
 
   const NETWORK_ENDPOINTS = {
     mainnet: {
-      libre: 'https://lb.libre.org',
+      libre: 'https://api.libre.org',
       btc: 'https://mempool.space',
       etherscan: 'https://etherscan.io'
     },
     testnet: {
-      libre: 'https://testnet.libre.org',
+      libre: 'https://testnet-api.libre.org',
       btc: 'https://mempool.space/signet',
       etherscan: 'https://sepolia.etherscan.io'
     }

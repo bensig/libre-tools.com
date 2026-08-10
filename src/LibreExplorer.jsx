@@ -19,8 +19,8 @@ const LibreExplorer = () => {
   }, [urlNetwork, contract, urlView, urlItem, urlScope, navigate]);
 
   const NETWORK_ENDPOINTS = {
-    mainnet: 'https://lb.libre.org',
-    testnet: 'https://testnet.libre.org',
+    mainnet: 'https://api.libre.org',
+    testnet: 'https://testnet-api.libre.org',
   };
 
   const EXAMPLE_ACCOUNTS = [
@@ -74,11 +74,11 @@ const LibreExplorer = () => {
   // Network config first
   const NETWORK_CONFIG = {
     mainnet: {
-      api: 'https://lb.libre.org',
+      api: 'https://api.libre.org',
       explorer: 'https://www.libreblocks.io'
     },
     testnet: {
-      api: 'https://testnet.libre.org',
+      api: 'https://testnet-api.libre.org',
       explorer: 'https://testnet.libreblocks.io'
     }
   };

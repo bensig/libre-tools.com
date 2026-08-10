@@ -14,11 +14,11 @@ const MultisigProposals = () => {
 
   const NETWORK_CONFIG = {
     mainnet: {
-      api: 'https://lb.libre.org',
+      api: 'https://api.libre.org',
       explorer: 'https://www.libreblocks.io'
     },
     testnet: {
-      api: 'https://testnet.libre.org',
+      api: 'https://testnet-api.libre.org',
       explorer: 'https://testnet.libreblocks.io'
     }
   };

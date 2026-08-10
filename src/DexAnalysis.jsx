@@ -7,7 +7,7 @@ const DexAnalysis = () => {
   const navigate = useNavigate();
   const initialized = useRef(false);
 
-  const API_ENDPOINT = "https://lb.libre.org";
+  const API_ENDPOINT = "https://api.libre.org";
 
   const [pair, setPair] = useState("btcusdt");
   const [orders, setOrders] = useState({ btcusdt: [], librebtc: [] });

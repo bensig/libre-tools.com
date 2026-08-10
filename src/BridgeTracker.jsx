@@ -41,13 +41,13 @@ const BridgeTracker = () => {
 
   const NETWORK_ENDPOINTS = {
     mainnet: {
-      libre: 'https://lb.libre.org',
+      libre: 'https://api.libre.org',
       btc: 'https://mempool.space',
       ethRpc: 'https://ethereum-rpc.publicnode.com',
       etherscan: 'https://etherscan.io'
     },
     testnet: {
-      libre: 'https://test.libre.eosusa.io',
+      libre: 'https://testnet-api.libre.org',
       btc: 'https://mempool.space/signet',
       ethRpc: 'https://ethereum-sepolia-rpc.publicnode.com',
       etherscan: 'https://sepolia.etherscan.io'

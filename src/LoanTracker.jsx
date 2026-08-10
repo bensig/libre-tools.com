@@ -8,8 +8,8 @@ const LoanTracker = () => {
   const navigate = useNavigate();
 
   const NETWORK_ENDPOINTS = {
-    mainnet: 'https://lb.libre.org',
-    testnet: 'https://testnet.libre.org',
+    mainnet: 'https://api.libre.org',
+    testnet: 'https://testnet-api.libre.org',
   };
 
   const [network, setNetwork] = useState(() =>

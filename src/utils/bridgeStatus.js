@@ -1,6 +1,6 @@
 export const API_ENDPOINTS = {
-  mainnet: 'https://lb.libre.org',
-  testnet: 'https://testnet.libre.org',
+  mainnet: 'https://api.libre.org',
+  testnet: 'https://testnet-api.libre.org',
 };
 
 export const BRIDGE_CONTRACTS = ['x.libre', 'v.libre', 't.libre'];
