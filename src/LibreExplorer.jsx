@@ -4,11 +4,19 @@ import { createSessionKit } from "./utils/session";
 import NetworkSelector from './components/NetworkSelector';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isCurrencyStatsTable, formatScopeDisplay } from './utils/symbolCodec';
+import { legacyExplorerRedirect } from './utils/explorerRedirect';
 
 const LibreExplorer = () => {
   const { network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope } = useParams();
   const navigate = useNavigate();
   const initialized = useRef(false);
+
+  useEffect(() => {
+    const target = legacyExplorerRedirect({
+      network: urlNetwork, contract, view: urlView, item: urlItem, scope: urlScope,
+    });
+    if (target) navigate(target, { replace: true });
+  }, [urlNetwork, contract, urlView, urlItem, urlScope, navigate]);
 
   const NETWORK_ENDPOINTS = {
     mainnet: 'https://lb.libre.org',

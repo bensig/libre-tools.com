@@ -4,6 +4,7 @@ import Home from './Home';
 import LibreExplorer from './LibreExplorer';
 import TransactionDownloader from './TransactionDownloader';
 import BridgeTracker from './BridgeTracker';
+import BridgeStatus from './BridgeStatus';
 import SeedGenerator from './SeedGenerator';
 import MultisigProposals from './MultisigProposals';
 import LoanTracker from './LoanTracker';
@@ -30,6 +31,9 @@ function App() {
                 <Route path="/transactions" element={<TransactionDownloader />} />
                 <Route path="/bridge-tracker" element={<BridgeTracker />} />
                 <Route path="/btc-tracker" element={<Navigate to="/bridge-tracker" replace />} />
+                <Route path="/bridge-status" element={<Navigate to="/bridge-status/mainnet/review" replace />} />
+                <Route path="/bridge-status/:network" element={<BridgeStatus />} />
+                <Route path="/bridge-status/:network/:tab" element={<BridgeStatus />} />
                 <Route path="/seed-generator" element={<SeedGenerator />} />
                 <Route path="/multisig" element={<MultisigProposals />} />
                 <Route path="/loans" element={<LoanTracker />} />
