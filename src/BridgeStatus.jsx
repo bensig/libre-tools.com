@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Nav, Table, Badge, Alert, Form, Spinner } from 'react-bootstrap';
@@ -65,31 +65,40 @@ export default function BridgeStatus() {
   const [contractFilter, setContractFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const endpoint = API_ENDPOINTS[network];
-    const [outs, ins] = await Promise.all([
-      fetchBridgeTable(endpoint, PEGOUT_TABLE),
-      fetchBridgeTable(endpoint, PEGIN_TABLE),
-    ]);
-    setPegouts(outs);
-    setPegins(ins);
-    setLoading(false);
-    // Msig matching is best-effort and slower; never blocks row rendering.
-    const reviewRows = outs.rows.filter((r) => r.scope === 'review');
-    if (reviewRows.length > 0) {
-      try {
-        const proposals = await fetchOpenProposals(endpoint);
-        setMsigMatches(matchProposalsToRows(proposals, reviewRows));
-      } catch {
+  useEffect(() => {
+    // Guard against a superseded run (network switched mid-flight) writing
+    // another network's data into state after this effect is cleaned up.
+    let stale = false;
+
+    const load = async () => {
+      setLoading(true);
+      const endpoint = API_ENDPOINTS[network];
+      const [outs, ins] = await Promise.all([
+        fetchBridgeTable(endpoint, PEGOUT_TABLE),
+        fetchBridgeTable(endpoint, PEGIN_TABLE),
+      ]);
+      if (stale) return;
+      setPegouts(outs);
+      setPegins(ins);
+      setLoading(false);
+      // Msig matching is best-effort and slower; never blocks row rendering.
+      const reviewRows = outs.rows.filter((r) => r.scope === 'review');
+      if (reviewRows.length > 0) {
+        try {
+          const proposals = await fetchOpenProposals(endpoint);
+          if (stale) return;
+          setMsigMatches(matchProposalsToRows(proposals, reviewRows));
+        } catch {
+          if (!stale) setMsigMatches(new Map());
+        }
+      } else if (!stale) {
         setMsigMatches(new Map());
       }
-    } else {
-      setMsigMatches(new Map());
-    }
-  }, [network]);
+    };
 
-  useEffect(() => { load(); }, [load]);
+    load();
+    return () => { stale = true; };
+  }, [network]);
   useEffect(() => { navigate(`/bridge-status/${network}/${tab}`, { replace: true }); }, [network, tab, navigate]);
 
   const reviewRows = pegouts.rows
