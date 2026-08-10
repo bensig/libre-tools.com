@@ -26,7 +26,9 @@ export async function fetchOpenProposals(endpoint) {
     table: 'proposal',
     limit: 100,
   });
-  const scopes = (scopeData.rows || []).map((r) => r.scope);
+  const scopes = (scopeData.rows || [])
+    .filter((r) => r.table === 'proposal')
+    .map((r) => r.scope);
   const perScope = await Promise.all(
     scopes.map(async (scope) => {
       const [proposalData, approvalsData] = await Promise.all([

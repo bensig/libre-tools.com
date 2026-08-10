@@ -87,7 +87,13 @@ describe('fetchOpenProposals', () => {
       const body = JSON.parse(opts.body);
       const json = async () => {
         if (url.endsWith('/v1/chain/get_table_by_scope')) {
-          return { rows: [{ code: 'eosio.msig', scope: 'benobi', table: 'proposal' }], more: '' };
+          return {
+            rows: [
+              { code: 'eosio.msig', scope: 'benobi', table: 'proposal' },
+              { code: 'eosio.msig', scope: 'benobi', table: 'approvals2' },
+            ],
+            more: '',
+          };
         }
         if (body.table === 'proposal') {
           return { rows: [{ proposal_name: 'payout5', packed_transaction: packed }], more: false };
