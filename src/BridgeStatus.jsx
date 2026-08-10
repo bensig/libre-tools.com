@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Container, Nav, Table, Badge, Alert, Form, Spinner } from 'react-bootstrap';
 import {
   API_ENDPOINTS, BRIDGE_CONTRACTS, PEGOUT_TABLE, PEGIN_TABLE, fetchBridgeTable,
@@ -13,11 +13,11 @@ const ZERO_HASH = /^0+$/;
 const rowHash = (row) => row.btc_hash || row.eth_tx_hash || row.tx_hash || '';
 
 function HashCell({ hash = '', contract, network }) {
-  if (!hash || ZERO_HASH.test(hash.replace(/^0x/, ''))) return <span className="text-muted">—</span>;
+  if (!hash || ZERO_HASH.test(hash.replace(/^0x/i, ''))) return <span className="text-muted">—</span>;
   const short = `${hash.slice(0, 8)}…${hash.slice(-6)}`;
   if (network !== 'mainnet') return <code>{short}</code>;
   const href = contract === 't.libre'
-    ? `https://etherscan.io/tx/${hash.startsWith('0x') ? hash : `0x${hash}`}`
+    ? `https://etherscan.io/tx/${/^0x/i.test(hash) ? hash : `0x${hash}`}`
     : `https://mempool.space/tx/${hash}`;
   return <a href={href} target="_blank" rel="noopener noreferrer"><code>{short}</code></a>;
 }
@@ -28,16 +28,17 @@ HashCell.propTypes = {
   network: PropTypes.string.isRequired,
 };
 
-function MsigBadge({ match = null }) {
+function MsigBadge({ match = null, loading = false }) {
+  if (loading) return <Badge bg="light" text="dark">checking…</Badge>;
   if (!match) return <Badge bg="secondary">no proposal yet</Badge>;
   const { proposal, level } = match;
   return (
-    <a href="/multisig" className="text-decoration-none">
+    <Link to="/multisig" className="text-decoration-none">
       <Badge bg={level === 'exact' ? 'success' : 'info'}>
         {proposal.proposalName} ({proposal.provided}/{proposal.provided + proposal.requested})
         {level === 'contract' ? ' ?' : ''}
       </Badge>
-    </a>
+    </Link>
   );
 }
 
@@ -50,6 +51,7 @@ MsigBadge.propTypes = {
     }).isRequired,
     level: PropTypes.oneOf(['exact', 'contract']).isRequired,
   }),
+  loading: PropTypes.bool,
 };
 
 export default function BridgeStatus() {
@@ -61,6 +63,7 @@ export default function BridgeStatus() {
   const [pegouts, setPegouts] = useState({ rows: [], errors: {} });
   const [pegins, setPegins] = useState({ rows: [], errors: {} });
   const [msigMatches, setMsigMatches] = useState(new Map());
+  const [msigLoading, setMsigLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contractFilter, setContractFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -80,19 +83,28 @@ export default function BridgeStatus() {
       if (stale) return;
       setPegouts(outs);
       setPegins(ins);
+      // Reset stale msig state from the previous network — row keys
+      // (contract:id) collide across networks, so leftover matches could
+      // transiently show the wrong network's proposal badges.
+      setMsigMatches(new Map());
       setLoading(false);
       // Msig matching is best-effort and slower; never blocks row rendering.
       const reviewRows = outs.rows.filter((r) => r.scope === 'review');
       if (reviewRows.length > 0) {
+        setMsigLoading(true);
         try {
           const proposals = await fetchOpenProposals(endpoint);
           if (stale) return;
           setMsigMatches(matchProposalsToRows(proposals, reviewRows));
+          setMsigLoading(false);
         } catch {
-          if (!stale) setMsigMatches(new Map());
+          if (!stale) {
+            setMsigMatches(new Map());
+            setMsigLoading(false);
+          }
         }
       } else if (!stale) {
-        setMsigMatches(new Map());
+        setMsigLoading(false);
       }
     };
 
@@ -151,7 +163,7 @@ export default function BridgeStatus() {
         <>
           <p className="text-muted">
             Peg-outs awaiting multisig approval. Verify each is legitimate, then approve via{' '}
-            <a href="/multisig">Multisig</a>.
+            <Link to="/multisig">Multisig</Link>.
           </p>
           <Table striped hover responsive size="sm">
             <thead>
@@ -167,7 +179,7 @@ export default function BridgeStatus() {
                   <td>{row.from}</td>
                   <td><code>{row.to}</code></td>
                   <td>{row.quantity}</td>
-                  <td><MsigBadge match={msigMatches.get(`${row.contract}:${row.id}`)} /></td>
+                  <td><MsigBadge match={msigMatches.get(`${row.contract}:${row.id}`)} loading={msigLoading} /></td>
                 </tr>
               ))}
               {reviewRows.length === 0 && (
