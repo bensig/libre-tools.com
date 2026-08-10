@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Container, Nav, Table, Badge, Alert, Form, Spinner } from 'react-bootstrap';
+import { Table, Badge, Alert, Form, Spinner, Dropdown } from 'react-bootstrap';
 import {
   API_ENDPOINTS, BRIDGE_CONTRACTS, PEGOUT_TABLE, PEGIN_TABLE, fetchBridgeTable,
 } from './utils/bridgeStatus';
@@ -123,49 +123,83 @@ export default function BridgeStatus() {
 
   const activeErrors = tab === 'pegins' ? pegins.errors : pegouts.errors;
 
+  const TAB_TITLES = { review: 'Review Queue', pegouts: 'Peg-outs', pegins: 'Peg-ins' };
+  const reviewCountBadge = (
+    <Badge bg={reviewRows.length > 0 ? 'warning' : 'secondary'} text={reviewRows.length > 0 ? 'dark' : undefined}>
+      {reviewRows.length}
+    </Badge>
+  );
+
   return (
-    <Container className="py-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2>Bridge Status</h2>
-        <Form.Select
-          style={{ width: 'auto' }}
-          value={network}
-          onChange={(e) => navigate(`/bridge-status/${e.target.value}/${tab}`)}
-        >
-          <option value="mainnet">Mainnet</option>
-          <option value="testnet">Testnet</option>
-        </Form.Select>
-      </div>
+    <div className="container-fluid">
+      <div className="row">
+        <div className="col-12 py-4">
+          <h2 className="mb-4">Bridge Status</h2>
 
-      <Nav variant="tabs" activeKey={tab} className="mb-3"
-        onSelect={(k) => navigate(`/bridge-status/${network}/${k}`)}>
-        <Nav.Item>
-          <Nav.Link eventKey="review">
-            Review{' '}
-            <Badge bg={reviewRows.length > 0 ? 'warning' : 'secondary'} text={reviewRows.length > 0 ? 'dark' : undefined}>
-              {reviewRows.length}
-            </Badge>
-          </Nav.Link>
-        </Nav.Item>
-        <Nav.Item><Nav.Link eventKey="pegouts">Peg-outs</Nav.Link></Nav.Item>
-        <Nav.Item><Nav.Link eventKey="pegins">Peg-ins</Nav.Link></Nav.Item>
-      </Nav>
+          <div style={{ maxWidth: '300px' }} className="mb-4">
+            <label className="form-label">Network</label>
+            <Form.Select
+              value={network}
+              onChange={(e) => navigate(`/bridge-status/${e.target.value}/${tab}`)}
+            >
+              <option value="mainnet">Mainnet</option>
+              <option value="testnet">Testnet</option>
+            </Form.Select>
+          </div>
 
-      {Object.entries(activeErrors).map(([contract, message]) => (
-        <Alert key={contract} variant="danger" className="py-2">
-          {contract}: {message}
-        </Alert>
-      ))}
+          {Object.entries(activeErrors).map(([contract, message]) => (
+            <Alert key={contract} variant="danger" className="py-2">
+              {contract}: {message}
+            </Alert>
+          ))}
 
+          <div className="card">
+            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">
+                {TAB_TITLES[tab]}{tab === 'review' && <> {reviewCountBadge}</>}
+              </h5>
+              <div>
+                <Dropdown className="d-inline-block">
+                  <Dropdown.Toggle variant="primary" id="tab-selector">
+                    {TAB_TITLES[tab]}
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu>
+                    <Dropdown.Item
+                      active={tab === 'review'}
+                      onClick={() => navigate(`/bridge-status/${network}/review`)}
+                    >
+                      Review {reviewCountBadge}
+                    </Dropdown.Item>
+                    <Dropdown.Item
+                      active={tab === 'pegouts'}
+                      onClick={() => navigate(`/bridge-status/${network}/pegouts`)}
+                    >
+                      Peg-outs
+                    </Dropdown.Item>
+                    <Dropdown.Item
+                      active={tab === 'pegins'}
+                      onClick={() => navigate(`/bridge-status/${network}/pegins`)}
+                    >
+                      Peg-ins
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown>
+              </div>
+            </div>
+            <div className="card-body">
       {loading ? (
-        <div className="text-center py-5"><Spinner animation="border" /></div>
+        <div className="text-center my-5">
+          <Spinner animation="border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </Spinner>
+        </div>
       ) : tab === 'review' ? (
         <>
           <p className="text-muted">
             Peg-outs awaiting multisig approval. Verify each is legitimate, then approve via{' '}
             <Link to="/multisig">Multisig</Link>.
           </p>
-          <Table striped hover responsive size="sm">
+          <Table striped bordered hover responsive size="sm">
             <thead>
               <tr>
                 <th>Contract</th><th>ID</th><th>From</th><th>To</th><th>Quantity</th><th>Msig proposal</th>
@@ -206,7 +240,7 @@ export default function BridgeStatus() {
               </Form.Select>
             )}
           </div>
-          <Table striped hover responsive size="sm">
+          <Table striped bordered hover responsive size="sm">
             <thead>
               <tr>
                 <th>Contract</th><th>Status</th><th>ID</th>
@@ -237,6 +271,10 @@ export default function BridgeStatus() {
           </Table>
         </>
       )}
-    </Container>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
