@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Table, Badge, Alert, Form, Spinner, Dropdown } from 'react-bootstrap';
+import { Table, Badge, Alert, Form, Spinner, Dropdown, Button } from 'react-bootstrap';
 import {
   API_ENDPOINTS, BRIDGE_CONTRACTS, PEGOUT_TABLE, PEGIN_TABLE, fetchBridgeTable,
 } from './utils/bridgeStatus';
@@ -9,6 +9,15 @@ import { fetchOpenProposals, matchProposalsToRows } from './utils/bridgeStatusMs
 
 const TABS = ['review', 'pegouts', 'pegins'];
 const ZERO_HASH = /^0+$/;
+
+// Known-stale mainnet peg-outs hidden from the review queue by default
+// (dust/loan-liquidation leftovers that will never get an msig proposal).
+const HIDDEN_REVIEW_PEGOUTS = new Set([
+  'v.libre:220', 'v.libre:219', 'v.libre:218', 'v.libre:217', 'v.libre:216',
+  'v.libre:215', 'v.libre:214', 'v.libre:213', 'v.libre:212', 'v.libre:211',
+  'v.libre:210',
+  'x.libre:295', 'x.libre:287', 'x.libre:285', 'x.libre:283',
+]);
 
 const rowHash = (row) => row.btc_hash || row.eth_tx_hash || row.tx_hash || '';
 
@@ -67,6 +76,7 @@ export default function BridgeStatus() {
   const [loading, setLoading] = useState(true);
   const [contractFilter, setContractFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showHidden, setShowHidden] = useState(false);
 
   useEffect(() => {
     // Guard against a superseded run (network switched mid-flight) writing
@@ -113,9 +123,12 @@ export default function BridgeStatus() {
   }, [network]);
   useEffect(() => { navigate(`/bridge-status/${network}/${tab}`, { replace: true }); }, [network, tab, navigate]);
 
-  const reviewRows = pegouts.rows
+  const allReviewRows = pegouts.rows
     .filter((r) => r.scope === 'review')
     .sort((a, b) => a.contract.localeCompare(b.contract) || b.id - a.id);
+  const isHiddenRow = (r) => network === 'mainnet' && HIDDEN_REVIEW_PEGOUTS.has(`${r.contract}:${r.id}`);
+  const hiddenCount = allReviewRows.filter(isHiddenRow).length;
+  const reviewRows = showHidden ? allReviewRows : allReviewRows.filter((r) => !isHiddenRow(r));
   const filterRows = (rows) => rows
     .filter((r) => contractFilter === 'all' || r.contract === contractFilter)
     .filter((r) => statusFilter === 'all' || r.scope === statusFilter)
@@ -199,6 +212,16 @@ export default function BridgeStatus() {
             Peg-outs awaiting multisig approval. Verify each is legitimate, then approve via{' '}
             <Link to="/multisig">Multisig</Link>.
           </p>
+          {hiddenCount > 0 && (
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              className="mb-3"
+              onClick={() => setShowHidden((v) => !v)}
+            >
+              {showHidden ? `Hide ${hiddenCount} hidden` : `Show ${hiddenCount} hidden ones`}
+            </Button>
+          )}
           <Table striped bordered hover responsive size="sm">
             <thead>
               <tr>
@@ -207,7 +230,8 @@ export default function BridgeStatus() {
             </thead>
             <tbody>
               {reviewRows.map((row) => (
-                <tr key={`${row.contract}:${row.id}`} className="table-warning">
+                <tr key={`${row.contract}:${row.id}`}
+                  className={isHiddenRow(row) ? 'table-secondary' : 'table-warning'}>
                   <td>{row.contract}</td>
                   <td>{row.id}</td>
                   <td>{row.from}</td>
