@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Layout from './components/Layout';
 import Home from './Home';
 import BotAccount from './BotAccount';
+import Permissions from './Permissions';
 import LibreExplorer from './LibreExplorer';
 import TransactionDownloader from './TransactionDownloader';
 import BridgeTracker from './BridgeTracker';
@@ -37,6 +38,7 @@ function App() {
                 <Route path="/bridge-status/:network/:tab" element={<BridgeStatus />} />
                 <Route path="/seed-generator" element={<SeedGenerator />} />
                 <Route path="/bot-account" element={<BotAccount />} />
+                <Route path="/permissions" element={<Permissions />} />
                 <Route path="/multisig" element={<MultisigProposals />} />
                 <Route path="/loans" element={<LoanTracker />} />
                 <Route path="/loans/:network" element={<LoanTracker />} />
