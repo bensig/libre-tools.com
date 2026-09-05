@@ -247,7 +247,11 @@ function BotAccount() {
           <Button
             variant="outline-danger"
             disabled={busy || !account || !chainId}
-            onClick={() => sign(() => buildRevokeActions({ account }))}
+            onClick={() =>
+              sign(() =>
+                buildRevokeActions({ account, linkedActions: existing?.linked_actions ?? [] })
+              )
+            }
           >
             Revoke agent permission
           </Button>

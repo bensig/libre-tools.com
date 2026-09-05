@@ -120,10 +120,32 @@ describe("buildAgentPermissionActions", () => {
 });
 
 describe("buildRevokeActions", () => {
-  it("deletes the agent permission and touches nothing else", () => {
+  it("unlinks every action before deleting — deleteauth refuses a linked authority", () => {
+    // Leap eosio_contract.cpp: "Cannot delete a linked authority. Unlink the authority
+    // first." Every permission this tool creates is linked, so deleteauth alone always fails.
+    const actions = buildRevokeActions({
+      account: "mybot",
+      linkedActions: [
+        { account: "usdt.libre", action: "transfer" },
+        { account: "dex.libre", action: "cancelorder" },
+      ],
+    });
+    expect(actions.map((a) => a.name)).toEqual(["unlinkauth", "unlinkauth", "deleteauth"]);
+    expect(actions[0].data).toEqual({ account: "mybot", code: "usdt.libre", type: "transfer" });
+    expect(actions.at(-1).data).toEqual({ account: "mybot", permission: AGENT_PERMISSION });
+  });
+
+  it("handles a contract-wide link, where action is absent on chain", () => {
+    const [unlink] = buildRevokeActions({
+      account: "mybot",
+      linkedActions: [{ account: "somecontract" }],
+    });
+    expect(unlink.data).toEqual({ account: "mybot", code: "somecontract", type: "" });
+  });
+
+  it("deletes directly when nothing is linked", () => {
     const actions = buildRevokeActions({ account: "mybot" });
     expect(actions).toHaveLength(1);
     expect(actions[0].name).toBe("deleteauth");
-    expect(actions[0].data).toEqual({ account: "mybot", permission: AGENT_PERMISSION });
   });
 });

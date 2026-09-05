@@ -2,7 +2,8 @@
 //
 // The security model of the whole agent platform rests on this shape: the bot holds a key
 // on a CHILD permission of `active`, linked only to named actions. It cannot change keys,
-// cannot vote, cannot touch owner/active, and is revoked with a single deleteauth. Getting
+// cannot vote, cannot touch owner/active, and is revoked by unlinking its actions and
+// deleting the permission. Getting
 // the parent or the linkauth set wrong silently hands a bot more power than intended, which
 // is why this lives in a tested pure function rather than inline in the component.
 
@@ -128,14 +129,35 @@ export function buildAgentPermissionActions({ account, agentKey, bundles }) {
   return [updateauth, ...linkauths];
 }
 
-/** The transaction that revokes it again. */
-export function buildRevokeActions({ account }) {
+/**
+ * The transaction that revokes it again.
+ *
+ * deleteauth REFUSES to remove a permission that still has links — Leap's
+ * eosio_contract.cpp: "Cannot delete a linked authority. Unlink the authority first."
+ * So every linked action must be unlinked in the same transaction, first.
+ *
+ * @param {object} opts
+ * @param {string} opts.account
+ * @param {{account: string, action?: string}[]} opts.linkedActions
+ *   the permission's current links, as `linked_actions` from /v1/chain/get_account.
+ *   `action` is optional on chain (a contract-wide link), and unlinkauth takes an empty
+ *   type in that case.
+ */
+export function buildRevokeActions({ account, linkedActions = [] }) {
   if (!account) throw new Error("account is required");
+  const auth = [{ actor: account, permission: "active" }];
+  const unlinks = linkedActions.map(({ account: code, action }) => ({
+    account: "eosio",
+    name: "unlinkauth",
+    authorization: auth,
+    data: { account, code, type: action ?? "" },
+  }));
   return [
+    ...unlinks,
     {
       account: "eosio",
       name: "deleteauth",
-      authorization: [{ actor: account, permission: "active" }],
+      authorization: auth,
       data: { account, permission: AGENT_PERMISSION },
     },
   ];
