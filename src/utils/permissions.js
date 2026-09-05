@@ -18,3 +18,20 @@ export function diffLinks(current = [], desired = []) {
   const remove = [...cur.entries()].filter(([id]) => !des.has(id)).map(([, l]) => l);
   return { add, remove };
 }
+
+/** Writing these is permanently out of scope: a bad updateauth on them is unrecoverable. */
+export const RESERVED_PERMISSIONS = new Set(["owner", "active"]);
+
+const NAME_RE = /^[a-z1-5.]+$/;
+
+export function validatePermissionName(name) {
+  if (!name) throw new Error("A permission name is required");
+  if (RESERVED_PERMISSIONS.has(name))
+    throw new Error(
+      `"${name}" is reserved — this tool only creates child permissions. Use /rekey to change owner or active keys.`
+    );
+  if (name.length > 12) throw new Error("A permission name is at most 12 characters");
+  if (!NAME_RE.test(name))
+    throw new Error("A permission name may contain only a-z, 1-5 and . characters");
+  return name;
+}
