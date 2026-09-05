@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diffLinks, linkId, normalizeLink, validatePermissionName, RESERVED_PERMISSIONS } from "../permissions";
+import { diffLinks, linkId, normalizeLink, validatePermissionName, RESERVED_PERMISSIONS, TEMPLATES, templateLinks } from "../permissions";
 
 const L = (account, action) => ({ account, action });
 
@@ -58,5 +58,41 @@ describe("validatePermissionName", () => {
     expect(() => validatePermissionName("waytoolongname")).toThrow(/12/);
     expect(() => validatePermissionName("has space")).toThrow(/a-z/);
     expect(() => validatePermissionName("digit9")).toThrow(/a-z/);
+  });
+});
+
+describe("templates", () => {
+  // Mirrors WHITELIST in libre-mcp src/compose/validate.ts. If that changes, this fails
+  // and the templates need updating.
+  const MCP_WHITELIST = [
+    "btc.libre::transfer", "usdt.libre::transfer", "tp.libre::transfer",
+    "eosio.token::transfer", "dex.libre::cancelorder",
+    "loan::createvault", "loan::genaddr", "loan::borrowvar",
+    "loan::processqueue", "loan::cancelloan", "loan::withdraw", "loan::cancelredeem",
+  ];
+
+  it("the bot template covers the mcp.libre.org whitelist exactly", () => {
+    expect(templateLinks(["bot"]).map(linkId).sort()).toEqual([...MCP_WHITELIST].sort());
+  });
+
+  it("names a default permission for each template", () => {
+    for (const [id, t] of Object.entries(TEMPLATES)) {
+      expect(t.permission, `${id} needs a default permission name`).toBeTruthy();
+      expect(() => validatePermissionName(t.permission)).not.toThrow();
+    }
+  });
+
+  it("trade grants no loan power", () => {
+    const ids = templateLinks(["trade"]).map(linkId);
+    expect(ids.some((i) => i.startsWith("loan::"))).toBe(false);
+  });
+
+  it("deduplicates actions shared between templates", () => {
+    const ids = templateLinks(["borrow", "lend"]).map(linkId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("rejects an unknown template rather than granting nothing", () => {
+    expect(() => templateLinks(["nonsense"])).toThrow(/Unknown template/);
   });
 });

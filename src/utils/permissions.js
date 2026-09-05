@@ -35,3 +35,78 @@ export function validatePermissionName(name) {
     throw new Error("A permission name may contain only a-z, 1-5 and . characters");
   return name;
 }
+
+const LOAN_CORE = [
+  { account: "loan", action: "createvault" },
+  { account: "loan", action: "genaddr" },
+  { account: "loan", action: "borrowvar" },
+  { account: "loan", action: "processqueue" },
+  { account: "loan", action: "cancelloan" },
+  { account: "loan", action: "withdraw" },
+];
+
+const TRADE_LINKS = [
+  { account: "usdt.libre", action: "transfer" },
+  { account: "btc.libre", action: "transfer" },
+  { account: "dex.libre", action: "cancelorder" },
+];
+
+/**
+ * Presets. `bot` deliberately covers the whole mcp.libre.org whitelist; the narrower
+ * templates exist so an account can grant one capability without the others.
+ */
+export const TEMPLATES = {
+  bot: {
+    label: "Full agent (mcp.libre.org)",
+    description: "Everything an agent using mcp.libre.org can do: trade, borrow, lend, transfer.",
+    permission: "agent",
+    links: [
+      ...TRADE_LINKS,
+      ...LOAN_CORE,
+      { account: "loan", action: "cancelredeem" },
+      { account: "tp.libre", action: "transfer" },
+      { account: "eosio.token", action: "transfer" },
+    ],
+  },
+  trade: {
+    label: "Trade on the DEX only",
+    description:
+      "Place and cancel orders on dex.libre. Orders are token transfers with a memo, so this lets the bot send BTC and USDT to dex.libre.",
+    permission: "trading",
+    links: TRADE_LINKS,
+  },
+  borrow: {
+    label: "Borrow against BTC only",
+    description: "Create and fund a vault, borrow USDT, repay, withdraw collateral.",
+    permission: "borrowing",
+    links: [...LOAN_CORE, { account: "usdt.libre", action: "transfer" }],
+  },
+  lend: {
+    label: "Lend USDT only",
+    description: "Deposit USDT, redeem TPF shares, manage the redemption queue.",
+    permission: "lending",
+    links: [
+      { account: "usdt.libre", action: "transfer" },
+      { account: "tp.libre", action: "transfer" },
+      { account: "loan", action: "cancelredeem" },
+      { account: "loan", action: "processqueue" },
+    ],
+  },
+};
+
+/** Deduplicated links for the given template ids, in a stable order. */
+export function templateLinks(ids = []) {
+  const seen = new Set();
+  const out = [];
+  for (const id of ids) {
+    const t = TEMPLATES[id];
+    if (!t) throw new Error(`Unknown template: ${id}`);
+    for (const link of t.links) {
+      const key = linkId(link);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(normalizeLink(link));
+    }
+  }
+  return out;
+}
