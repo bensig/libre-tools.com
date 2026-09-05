@@ -198,3 +198,44 @@ export function buildRevokeActions({ account, permission, linkedActions = [] }) 
     },
   ];
 }
+
+/**
+ * Sort an account's permissions into what this tool may manage and what it may only show.
+ *
+ * - `reserved`  — owner and active. Displayed, never written. owner first, then active.
+ * - `manageable` — direct children of active. These are ours to create, edit and revoke.
+ * - `nested`    — anything deeper (a child of a child). Real, and previously invisible here
+ *   because the list only looked at children of active. Shown read-only with its parent
+ *   named, so an account audit is not silently incomplete.
+ *
+ * @param {{perm_name: string, parent: string}[]} permissions from /v1/chain/get_account
+ */
+export function groupPermissions(permissions = []) {
+  const byName = (a, b) => a.perm_name.localeCompare(b.perm_name);
+  const reserved = [];
+  const manageable = [];
+  const nested = [];
+  for (const p of permissions) {
+    if (RESERVED_PERMISSIONS.has(p.perm_name)) reserved.push(p);
+    else if (p.parent === ACTIVE) manageable.push(p);
+    else nested.push(p);
+  }
+  // owner is the root of the authority tree, so it reads first.
+  reserved.sort((a, b) => (a.perm_name === "owner" ? -1 : b.perm_name === "owner" ? 1 : 0));
+  return { reserved, manageable: manageable.sort(byName), nested: nested.sort(byName) };
+}
+
+/** Keys, threshold, delegated accounts and waits, for the expanded detail view. */
+export function permissionDetail(permission) {
+  const auth = permission?.required_auth ?? {};
+  return {
+    threshold: auth.threshold ?? null,
+    keys: (auth.keys ?? []).map((k) => ({ key: k.key, weight: k.weight })),
+    accounts: (auth.accounts ?? []).map((a) => ({
+      actor: a.permission?.actor,
+      permission: a.permission?.permission,
+      weight: a.weight,
+    })),
+    waits: (auth.waits ?? []).map((w) => ({ wait_sec: w.wait_sec, weight: w.weight })),
+  };
+}
