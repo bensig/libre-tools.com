@@ -110,3 +110,85 @@ export function templateLinks(ids = []) {
   }
   return out;
 }
+
+const ACTIVE = "active";
+const auth = (account) => [{ actor: account, permission: ACTIVE }];
+
+function assertPublicKey(key) {
+  if (!key) throw new Error("A public key is required");
+  if (!key.startsWith("PUB_") && !key.startsWith("EOS"))
+    throw new Error("That must be a public key (PUB_K1_… or EOS…), never a private key");
+  return key;
+}
+
+function updateauthAction({ account, permission, key }) {
+  return {
+    account: "eosio",
+    name: "updateauth",
+    authorization: auth(account),
+    data: {
+      account,
+      permission,
+      parent: ACTIVE,
+      auth: { threshold: 1, keys: [{ key, weight: 1 }], accounts: [], waits: [] },
+    },
+  };
+}
+
+function linkauthAction({ account, permission, link }) {
+  const l = normalizeLink(link);
+  return {
+    account: "eosio",
+    name: "linkauth",
+    authorization: auth(account),
+    data: { account, code: l.account, type: l.action, requirement: permission },
+  };
+}
+
+function unlinkauthAction({ account, link }) {
+  const l = normalizeLink(link);
+  return {
+    account: "eosio",
+    name: "unlinkauth",
+    authorization: auth(account),
+    data: { account, code: l.account, type: l.action },
+  };
+}
+
+export function buildCreateActions({ account, permission, key, links = [] }) {
+  if (!account) throw new Error("An account is required");
+  validatePermissionName(permission);
+  assertPublicKey(key);
+  if (!links.length) throw new Error("Select at least one action to link");
+  return [
+    updateauthAction({ account, permission, key }),
+    ...links.map((link) => linkauthAction({ account, permission, link })),
+  ];
+}
+
+/** Only what changed: updateauth if the key moved, plus the link diff. */
+export function buildEditActions({ account, permission, key, currentKey, current = [], desired = [] }) {
+  if (!account) throw new Error("An account is required");
+  validatePermissionName(permission);
+  assertPublicKey(key);
+  const { add, remove } = diffLinks(current, desired);
+  const actions = [];
+  if (key !== currentKey) actions.push(updateauthAction({ account, permission, key }));
+  for (const link of add) actions.push(linkauthAction({ account, permission, link }));
+  for (const link of remove) actions.push(unlinkauthAction({ account, link }));
+  return actions;
+}
+
+export function buildRevokeActions({ account, permission, linkedActions = [] }) {
+  if (!account) throw new Error("An account is required");
+  validatePermissionName(permission);
+  return [
+    ...linkedActions.map((link) => unlinkauthAction({ account, link })),
+    {
+      account: "eosio",
+      name: "deleteauth",
+      authorization: auth(account),
+      data: { account, permission },
+    },
+  ];
+}

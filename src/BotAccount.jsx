@@ -3,12 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { Alert, Button, Card, Form, Spinner, Table } from "react-bootstrap";
 import { createSessionKit } from "./utils/session";
 import {
-  BUNDLES,
-  AGENT_PERMISSION,
-  buildAgentPermissionActions,
+  TEMPLATES,
+  templateLinks,
+  buildCreateActions,
   buildRevokeActions,
-  linkedActions,
-} from "./utils/botAccount";
+} from "./utils/permissions";
+
+const AGENT_PERMISSION = "agent";
 
 // Same endpoints as Rekey.jsx / LibreExplorer.jsx.
 const NETWORK_ENDPOINTS = {
@@ -75,7 +76,7 @@ function BotAccount() {
 
   const preview = useMemo(() => {
     try {
-      return selected.length ? linkedActions(selected) : [];
+      return selected.length ? templateLinks(selected) : [];
     } catch {
       return [];
     }
@@ -171,7 +172,7 @@ function BotAccount() {
             Grant the least it needs. Each capability is a set of specific actions — anything not
             listed stays impossible for that key.
           </p>
-          {Object.entries(BUNDLES).map(([key, bundle]) => (
+          {Object.entries(TEMPLATES).map(([key, bundle]) => (
             <Form.Check
               key={key}
               type="checkbox"
@@ -239,7 +240,11 @@ function BotAccount() {
       <div className="d-flex gap-2 flex-wrap">
         <Button
           disabled={!canGrant}
-          onClick={() => sign(() => buildAgentPermissionActions({ account, agentKey, bundles: selected }))}
+          onClick={() =>
+            sign(() =>
+              buildCreateActions({ account, permission: "agent", key: agentKey, links: templateLinks(selected) })
+            )
+          }
         >
           {busy ? <Spinner size="sm" animation="border" /> : "Connect wallet & grant"}
         </Button>
@@ -249,7 +254,7 @@ function BotAccount() {
             disabled={busy || !account || !chainId}
             onClick={() =>
               sign(() =>
-                buildRevokeActions({ account, linkedActions: existing?.linked_actions ?? [] })
+                buildRevokeActions({ account, permission: "agent", linkedActions: existing?.linked_actions ?? [] })
               )
             }
           >

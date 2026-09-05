@@ -96,3 +96,133 @@ describe("templates", () => {
     expect(() => templateLinks(["nonsense"])).toThrow(/Unknown template/);
   });
 });
+
+import { buildCreateActions, buildEditActions, buildRevokeActions } from "../permissions";
+
+const KEY = "PUB_K1_57cc8Hs2ScTLjFNJQ2Zh8wTHmkkwKwvtMUfJdfNhjH5tLgg2gT";
+const KEY2 = "PUB_K1_6RWZ1CmDL4B6LdixuertnzxcRuUDac3NQspJEvMpBMv1hFAJUu";
+
+describe("buildCreateActions", () => {
+  const links = [{ account: "usdt.libre", action: "transfer" }];
+
+  it("creates the permission as a child of active, threshold 1, one key", () => {
+    const [updateauth] = buildCreateActions({ account: "me", permission: "trading", key: KEY, links });
+    expect(updateauth).toEqual({
+      account: "eosio",
+      name: "updateauth",
+      authorization: [{ actor: "me", permission: "active" }],
+      data: {
+        account: "me",
+        permission: "trading",
+        parent: "active",
+        auth: { threshold: 1, keys: [{ key: KEY, weight: 1 }], accounts: [], waits: [] },
+      },
+    });
+  });
+
+  it("emits one linkauth per link and nothing else", () => {
+    const actions = buildCreateActions({
+      account: "me", permission: "trading", key: KEY,
+      links: [{ account: "usdt.libre", action: "transfer" }, { account: "dex.libre", action: "cancelorder" }],
+    });
+    expect(actions.map((a) => a.name)).toEqual(["updateauth", "linkauth", "linkauth"]);
+    expect(actions[1].data).toEqual({
+      account: "me", code: "usdt.libre", type: "transfer", requirement: "trading",
+    });
+  });
+
+  it("refuses a private key", () => {
+    expect(() =>
+      buildCreateActions({ account: "me", permission: "trading", key: "PVT_K1_abc", links })
+    ).toThrow(/public key/i);
+  });
+
+  it("refuses to write owner or active", () => {
+    for (const permission of ["owner", "active"]) {
+      expect(() => buildCreateActions({ account: "me", permission, key: KEY, links })).toThrow(/reserved/i);
+    }
+  });
+
+  it("requires at least one link", () => {
+    expect(() => buildCreateActions({ account: "me", permission: "trading", key: KEY, links: [] }))
+      .toThrow(/at least one action/i);
+  });
+});
+
+describe("buildEditActions", () => {
+  const base = {
+    account: "me", permission: "trading", key: KEY, currentKey: KEY,
+    current: [{ account: "usdt.libre", action: "transfer" }],
+  };
+
+  it("emits nothing when nothing changed", () => {
+    expect(buildEditActions({ ...base, desired: [...base.current] })).toEqual([]);
+  });
+
+  it("does not touch updateauth when only links changed", () => {
+    const actions = buildEditActions({
+      ...base,
+      desired: [{ account: "usdt.libre", action: "transfer" }, { account: "loan", action: "borrowvar" }],
+    });
+    expect(actions.map((a) => a.name)).toEqual(["linkauth"]);
+    expect(actions[0].data.code).toBe("loan");
+  });
+
+  it("unlinks removed actions rather than leaving them linked", () => {
+    const actions = buildEditActions({ ...base, desired: [{ account: "loan", action: "borrowvar" }] });
+    expect(actions.map((a) => a.name).sort()).toEqual(["linkauth", "unlinkauth"]);
+    const unlink = actions.find((a) => a.name === "unlinkauth");
+    expect(unlink.data).toEqual({ account: "me", code: "usdt.libre", type: "transfer" });
+  });
+
+  it("emits updateauth only when the key changed", () => {
+    const actions = buildEditActions({ ...base, key: KEY2, desired: [...base.current] });
+    expect(actions.map((a) => a.name)).toEqual(["updateauth"]);
+    expect(actions[0].data.auth.keys).toEqual([{ key: KEY2, weight: 1 }]);
+  });
+
+  it("refuses to edit owner or active", () => {
+    expect(() => buildEditActions({ ...base, permission: "owner", desired: [] })).toThrow(/reserved/i);
+  });
+});
+
+describe("buildRevokeActions", () => {
+  it("unlinks every action before deleting — deleteauth refuses a linked authority", () => {
+    const actions = buildRevokeActions({
+      account: "me", permission: "trading",
+      linkedActions: [{ account: "usdt.libre", action: "transfer" }, { account: "dex.libre", action: "cancelorder" }],
+    });
+    expect(actions.map((a) => a.name)).toEqual(["unlinkauth", "unlinkauth", "deleteauth"]);
+    expect(actions.at(-1).data).toEqual({ account: "me", permission: "trading" });
+  });
+
+  it("unlinks a contract-wide link with an empty type", () => {
+    const [unlink] = buildRevokeActions({
+      account: "me", permission: "trading", linkedActions: [{ account: "somecontract" }],
+    });
+    expect(unlink.data).toEqual({ account: "me", code: "somecontract", type: "" });
+  });
+
+  it("refuses to delete owner or active", () => {
+    expect(() => buildRevokeActions({ account: "me", permission: "active", linkedActions: [] }))
+      .toThrow(/reserved/i);
+  });
+});
+
+describe("safety boundary", () => {
+  it("no builder ever emits an action targeting owner or active", () => {
+    const links = [{ account: "usdt.libre", action: "transfer" }];
+    const all = [
+      ...buildCreateActions({ account: "me", permission: "trading", key: KEY, links }),
+      ...buildEditActions({
+        account: "me", permission: "trading", key: KEY2, currentKey: KEY, current: links, desired: [],
+      }),
+      ...buildRevokeActions({ account: "me", permission: "trading", linkedActions: links }),
+    ];
+    for (const a of all) {
+      if (["updateauth", "deleteauth"].includes(a.name)) {
+        expect(RESERVED_PERMISSIONS.has(a.data.permission)).toBe(false);
+      }
+    }
+  });
+});
