@@ -100,7 +100,7 @@ describe("templates", () => {
 import { buildCreateActions, buildEditActions, buildRevokeActions } from "../permissions";
 
 const KEY = "PUB_K1_57cc8Hs2ScTLjFNJQ2Zh8wTHmkkwKwvtMUfJdfNhjH5tLgg2gT";
-const KEY2 = "PUB_K1_6RWZ1CmDL4B6LdixuertnzxcRuUDac3NQspJEvMpBMv1hFAJUu";
+const KEY2 = "PUB_K1_5XsDEt18AyjCJfP4McYpqCmUJEWAEGyVFqpgJFDRGyx3KDoNvC";
 
 describe("buildCreateActions", () => {
   const links = [{ account: "usdt.libre", action: "transfer" }];
@@ -135,6 +135,12 @@ describe("buildCreateActions", () => {
     expect(() =>
       buildCreateActions({ account: "me", permission: "trading", key: "PVT_K1_abc", links })
     ).toThrow(/public key/i);
+  });
+
+  it("refuses a truncated/mistyped key even with a valid prefix", () => {
+    expect(() =>
+      buildCreateActions({ account: "me", permission: "trading", key: "PUB_K1_notarealkey", links })
+    ).toThrow(/valid public key/i);
   });
 
   it("refuses to write owner or active", () => {
@@ -206,6 +212,12 @@ describe("buildRevokeActions", () => {
   it("refuses to delete owner or active", () => {
     expect(() => buildRevokeActions({ account: "me", permission: "active", linkedActions: [] }))
       .toThrow(/reserved/i);
+  });
+
+  it("emits a single deleteauth when nothing is linked", () => {
+    const actions = buildRevokeActions({ account: "me", permission: "trading", linkedActions: [] });
+    expect(actions.map((a) => a.name)).toEqual(["deleteauth"]);
+    expect(actions[0].data).toEqual({ account: "me", permission: "trading" });
   });
 });
 

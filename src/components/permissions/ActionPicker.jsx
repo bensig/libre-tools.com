@@ -6,6 +6,7 @@ import { linkId, normalizeLink } from "../../utils/permissions";
 export default function ActionPicker({ apiUrl, selected = [], onChange }) {
   const [contract, setContract] = useState("");
   const [actions, setActions] = useState(null);
+  const [loadedContract, setLoadedContract] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [manual, setManual] = useState(false);
@@ -16,8 +17,10 @@ export default function ActionPicker({ apiUrl, selected = [], onChange }) {
     setError(null);
     setActions(null);
     setManual(false);
+    const target = contract.trim();
     try {
-      setActions(await fetchContractActions(apiUrl, contract.trim()));
+      setActions(await fetchContractActions(apiUrl, target));
+      setLoadedContract(target);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -80,13 +83,13 @@ export default function ActionPicker({ apiUrl, selected = [], onChange }) {
       {actions && (
         <div className="border rounded p-2" style={{ maxHeight: "14rem", overflowY: "auto" }}>
           {actions.map((action) => {
-            const link = { account: contract, action };
+            const link = { account: loadedContract, action };
             return (
               <Form.Check
                 key={action}
                 type="checkbox"
-                id={`act-${contract}-${action}`}
-                label={<code>{`${contract}::${action}`}</code>}
+                id={`act-${loadedContract}-${action}`}
+                label={<code>{`${loadedContract}::${action}`}</code>}
                 checked={has(link)}
                 onChange={() => toggle(link)}
               />

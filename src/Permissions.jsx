@@ -28,7 +28,8 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
   const [searchParams] = useSearchParams();
   const network = (searchParams.get("network") || "mainnet").trim().toLowerCase();
   const apiUrl = NETWORK_ENDPOINTS[network] || NETWORK_ENDPOINTS.mainnet;
-  const templateId = lockedTemplate ?? searchParams.get("template");
+  const rawTemplateId = lockedTemplate ?? searchParams.get("template");
+  const templateId = rawTemplateId && TEMPLATES[rawTemplateId] ? rawTemplateId : null;
 
   const [account, setAccount] = useState((searchParams.get("account") || "").trim().toLowerCase());
   const [permissions, setPermissions] = useState(null);
@@ -51,16 +52,23 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
   }, [apiUrl]);
 
   const loadAccount = useCallback(async () => {
-    if (!account) return setPermissions(null);
+    if (!account) {
+      setPermissions(null);
+      return null;
+    }
     try {
       const res = await fetch(`${apiUrl}/v1/chain/get_account`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ account_name: account }),
       });
       const data = await res.json();
-      setPermissions(data?.permissions ?? null);
+      const fresh = data?.permissions ?? null;
+      setPermissions(fresh);
+      return fresh;
     } catch {
       setPermissions(null);
+      return null;
     }
   }, [account, apiUrl]);
 
@@ -69,9 +77,21 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
   }, [loadAccount]);
 
   const startEdit = (perm) => {
+    const auth = perm.required_auth ?? {};
+    const isMultiAuth =
+      (auth.keys?.length ?? 0) > 1 || (auth.accounts?.length ?? 0) > 0 || (auth.waits?.length ?? 0) > 0;
+    if (isMultiAuth) {
+      setEditing(null);
+      setError(
+        `"${perm.perm_name}" holds more than one key, a co-signer account, or a wait — this tool only manages ` +
+          "single-key permissions. Manage it elsewhere (e.g. via a signing tool that supports full authorities)."
+      );
+      setTxid(null);
+      return;
+    }
     setEditing(perm.perm_name);
     setName(perm.perm_name);
-    const k = perm.required_auth?.keys?.[0]?.key ?? "";
+    const k = auth.keys?.[0]?.key ?? "";
     setKey(k);
     setCurrentKey(k);
     setLinks((perm.linked_actions ?? []).map(normalizeLink));
@@ -95,11 +115,19 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
     setTxid(null);
     try {
       // Re-read immediately before building, so a stale view can't cause an unintended unlink.
-      await loadAccount();
+      // `build` receives the freshly fetched permissions array as an argument — it must never
+      // close over the React `permissions` state, which can still reflect the stale render.
+      const fresh = await loadAccount();
       const kit = createSessionKit({ chainId, apiUrl });
       const { session } = await kit.login();
-      setSignedAs(String(session.actor));
-      const actions = build();
+      const signer = String(session.actor);
+      if (signer !== account) {
+        throw new Error(
+          `Signed in as "${signer}", but this permission belongs to "${account}" — connect the wallet for "${account}" and try again.`
+        );
+      }
+      setSignedAs(signer);
+      const actions = build(fresh ?? []);
       if (!actions.length) throw new Error("No changes to apply");
       const result = await session.transact({ actions });
       setTxid(result.resolved?.transaction?.id ?? result.response?.transaction_id ?? null);
@@ -112,25 +140,24 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
   };
 
   const onRevoke = (perm) =>
-    sign(() =>
-      buildRevokeActions({
+    sign((fresh) => {
+      const current = fresh.find((p) => p.perm_name === perm.perm_name);
+      return buildRevokeActions({
         account,
         permission: perm.perm_name,
-        linkedActions: perm.linked_actions ?? [],
-      })
-    );
+        linkedActions: current?.linked_actions ?? [],
+      });
+    });
 
   const submit = () =>
-    sign(() =>
+    sign((fresh) =>
       editing
         ? buildEditActions({
             account,
             permission: name,
             key,
             currentKey,
-            current: (permissions?.find((p) => p.perm_name === editing)?.linked_actions ?? []).map(
-              normalizeLink
-            ),
+            current: (fresh.find((p) => p.perm_name === editing)?.linked_actions ?? []).map(normalizeLink),
             desired: links,
           })
         : buildCreateActions({ account, permission: name, key, links })
@@ -143,7 +170,7 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
     nameError = e.message;
   }
 
-  const canSubmit = account && name && !nameError && key && links.length && chainId && !busy;
+  const canSubmit = account && name && !nameError && key && (editing || links.length) && chainId && !busy;
 
   return (
     <div className="container py-4" style={{ maxWidth: "52rem" }}>

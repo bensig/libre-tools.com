@@ -1,4 +1,5 @@
 // src/utils/permissions.js
+import { PublicKey } from "@wharfkit/antelope";
 
 /** A link is {account, action}; `action` is optional on chain for a contract-wide link. */
 export function normalizeLink(link) {
@@ -118,6 +119,11 @@ function assertPublicKey(key) {
   if (!key) throw new Error("A public key is required");
   if (!key.startsWith("PUB_") && !key.startsWith("EOS"))
     throw new Error("That must be a public key (PUB_K1_… or EOS…), never a private key");
+  try {
+    PublicKey.from(key);
+  } catch {
+    throw new Error("That doesn't look like a valid public key — check it was copied in full");
+  }
   return key;
 }
 
