@@ -238,3 +238,84 @@ describe("safety boundary", () => {
     }
   });
 });
+
+import { groupPermissions, permissionDetail } from "../permissions";
+
+const perm = (perm_name, parent, over = {}) => ({
+  perm_name,
+  parent,
+  required_auth: { threshold: 1, keys: [], accounts: [], waits: [] },
+  linked_actions: [],
+  ...over,
+});
+
+describe("groupPermissions", () => {
+  it("separates reserved, directly manageable, and nested permissions", () => {
+    const { reserved, manageable, nested } = groupPermissions([
+      perm("active", "owner"),
+      perm("owner", ""),
+      perm("trading", "active"),
+      perm("deep", "trading"),
+    ]);
+    expect(reserved.map((p) => p.perm_name)).toEqual(["owner", "active"]);
+    expect(manageable.map((p) => p.perm_name)).toEqual(["trading"]);
+    expect(nested.map((p) => p.perm_name)).toEqual(["deep"]);
+  });
+
+  it("does not drop a nested permission — it was previously invisible", () => {
+    // A permission whose parent is another child used to vanish from this page entirely,
+    // making an account audit silently incomplete.
+    const { manageable, nested } = groupPermissions([perm("agent", "claim")]);
+    expect(manageable).toEqual([]);
+    expect(nested.map((p) => p.perm_name)).toEqual(["agent"]);
+  });
+
+  it("sorts manageable and nested by name for a stable render", () => {
+    const { manageable } = groupPermissions([
+      perm("zeta", "active"),
+      perm("alpha", "active"),
+      perm("mid", "active"),
+    ]);
+    expect(manageable.map((p) => p.perm_name)).toEqual(["alpha", "mid", "zeta"]);
+  });
+
+  it("handles an account with only owner and active", () => {
+    const { reserved, manageable, nested } = groupPermissions([
+      perm("active", "owner"),
+      perm("owner", ""),
+    ]);
+    expect(reserved).toHaveLength(2);
+    expect(manageable).toEqual([]);
+    expect(nested).toEqual([]);
+  });
+
+  it("returns empty groups for no input", () => {
+    expect(groupPermissions()).toEqual({ reserved: [], manageable: [], nested: [] });
+  });
+});
+
+describe("permissionDetail", () => {
+  it("extracts keys with weights, threshold, delegated accounts and waits", () => {
+    const d = permissionDetail({
+      required_auth: {
+        threshold: 2,
+        keys: [{ key: KEY, weight: 1 }],
+        accounts: [{ permission: { actor: "helper", permission: "active" }, weight: 1 }],
+        waits: [{ wait_sec: 3600, weight: 1 }],
+      },
+    });
+    expect(d.threshold).toBe(2);
+    expect(d.keys).toEqual([{ key: KEY, weight: 1 }]);
+    expect(d.accounts).toEqual([{ actor: "helper", permission: "active", weight: 1 }]);
+    expect(d.waits).toEqual([{ wait_sec: 3600, weight: 1 }]);
+  });
+
+  it("survives a permission with no required_auth at all", () => {
+    expect(permissionDetail(undefined)).toEqual({
+      threshold: null,
+      keys: [],
+      accounts: [],
+      waits: [],
+    });
+  });
+});

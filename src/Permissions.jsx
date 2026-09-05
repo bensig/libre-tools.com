@@ -208,6 +208,8 @@ export default function Permissions({ lockedTemplate = null, title, intro }) {
           onEdit={startEdit}
           onRevoke={onRevoke}
           canSign
+          network={network}
+          account={account}
         />
       )}
 
