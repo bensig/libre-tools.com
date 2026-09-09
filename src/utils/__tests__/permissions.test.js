@@ -69,6 +69,9 @@ describe("templates", () => {
     "eosio.token::transfer", "dex.libre::cancelorder",
     "loan::createvault", "loan::genaddr", "loan::borrowvar",
     "loan::processqueue", "loan::cancelloan", "loan::withdraw", "loan::cancelredeem",
+    // Bridge registration: without these a bot cannot get its own funding address without
+    // a human opening a wallet UI. Both take only an account name and move no funds.
+    "x.libre::newaccount", "v.libre::newaccount",
   ];
 
   it("the bot template covers the mcp.libre.org whitelist exactly", () => {
