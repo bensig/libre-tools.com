@@ -53,6 +53,18 @@ const TRADE_LINKS = [
 ];
 
 /**
+ * Registering with a bridge so the account is assigned its own Bitcoin address.
+ *
+ * Without this a bot cannot obtain a funding address on its own — the address is otherwise
+ * created only when a human opens Receive in a wallet. The action takes a single account
+ * name and moves no funds.
+ */
+const BRIDGE_LINKS = [
+  { account: "x.libre", action: "newaccount" },
+  { account: "v.libre", action: "newaccount" },
+];
+
+/**
  * Presets. `bot` deliberately covers the whole mcp.libre.org whitelist; the narrower
  * templates exist so an account can grant one capability without the others.
  */
@@ -63,6 +75,7 @@ export const TEMPLATES = {
     permission: "agent",
     links: [
       ...TRADE_LINKS,
+      ...BRIDGE_LINKS,
       ...LOAN_CORE,
       { account: "loan", action: "cancelredeem" },
       { account: "tp.libre", action: "transfer" },
@@ -72,9 +85,9 @@ export const TEMPLATES = {
   trade: {
     label: "Trade on the DEX only",
     description:
-      "Place and cancel orders on dex.libre. Orders are token transfers with a memo, so this lets the bot send BTC and USDT to dex.libre.",
+      "Place and cancel orders on dex.libre, and register for a Bitcoin deposit address so the bot can be funded. Orders are token transfers with a memo, so this lets the bot send BTC and USDT to dex.libre.",
     permission: "trading",
-    links: TRADE_LINKS,
+    links: [...TRADE_LINKS, ...BRIDGE_LINKS],
   },
   borrow: {
     label: "Borrow against BTC only",
