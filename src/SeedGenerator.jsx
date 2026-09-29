@@ -1,8 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, Button, Form, Alert } from 'react-bootstrap';
-import { WORDLIST } from './word-list';
+import { entropyToMnemonic } from 'bip39';
 import { deriveLibreKeys } from './rekey/seedBundle';
 import SecretReveal from './components/SecretReveal';
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 function SeedGenerator() {
   const [entropy, setEntropy] = useState([]);
@@ -23,7 +27,6 @@ function SeedGenerator() {
 
   const collectMouseEntropy = (event) => {
     if (isCollecting && entropy.length < requiredEntropyPoints) {
-      console.log('Collecting mouse/touch entropy point:', entropy.length + 1);
       const point = {
         type: 'pointer',
         x: event.clientX || (event.touches && event.touches[0].clientX),
@@ -58,118 +61,58 @@ function SeedGenerator() {
 
   const collectKeyboardEntropy = (event) => {
     if (isCollecting && entropy.length < requiredEntropyPoints) {
-      console.log('Collecting keyboard entropy point:', entropy.length + 1);
       // Add multiple entropy points per keypress to make keyboard input more significant
       setEntropy(prev => [...prev, {
         type: 'keyboard',
         key: event.key,
         keyCode: event.keyCode,
-        timestamp: Date.now(),
-        random: Math.random()
+        timestamp: Date.now()
       }, {
         type: 'keyboard',
         key: event.key,
         keyCode: event.keyCode,
-        timestamp: Date.now() + 1, // Ensure unique timestamp
-        random: Math.random()
+        timestamp: Date.now() + 1
       }, {
         type: 'keyboard',
         key: event.key,
         keyCode: event.keyCode,
-        timestamp: Date.now() + 2, // Ensure unique timestamp
-        random: Math.random()
+        timestamp: Date.now() + 2
       }]);
     }
   };
 
   const generateSeed = async () => {
     try {
-      console.log('Generating seed...'); // Debug log
-      
-      // Convert mouse movements to entropy
-      const entropyData = entropy.map(e => 
-        `${e.x},${e.y},${e.timestamp}`
-      ).join('');
-      
-      console.log('Entropy data length:', entropyData.length); // Debug log
-      
-      // Convert string to Uint8Array for crypto operations
-      const encoder = new TextEncoder();
-      const data = encoder.encode(entropyData);
-      
-      // Generate random values using Web Crypto API
+      // Security comes from the CSPRNG bytes; user input is mixed in via SHA-256
+      // and can only add entropy, never remove it.
+      const userData = new TextEncoder().encode(JSON.stringify(entropy));
       const randomBytes = new Uint8Array(entropyBits / 8);
       crypto.getRandomValues(randomBytes);
-      
-      // Mix user entropy with random values
-      const mixedData = new Uint8Array([...data, ...randomBytes]);
-      
-      console.log('Mixed data length:', mixedData.length); // Debug log
-      
-      // Generate final hash
-      const hashBuffer = await crypto.subtle.digest('SHA-256', mixedData);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      
-      // Convert to binary string
-      const binaryStr = hashArray
-        .slice(0, entropyBits / 8)
-        .map(b => b.toString(2).padStart(8, '0'))
-        .join('');
-      
-      console.log('Binary string length:', binaryStr.length); // Debug log
-      
-      // Calculate checksum
-      const checksumBits = entropyBits / 32;
-      const checksumData = await crypto.subtle.digest(
-        'SHA-256',
-        new Uint8Array(hashArray.slice(0, entropyBits / 8))
-      );
-      const checksumArray = new Uint8Array(checksumData);
-      const checksum = checksumArray[0].toString(2).padStart(8, '0').slice(0, checksumBits);
-      
-      console.log('Checksum length:', checksum.length); // Debug log
-      
-      // Combine entropy and checksum
-      const combinedBits = binaryStr + checksum;
-      
-      console.log('Combined bits length:', combinedBits.length); // Debug log
-      
-      // Split into 11-bit segments and convert to words
-      const words = [];
-      for (let i = 0; i < combinedBits.length; i += 11) {
-        const index = parseInt(combinedBits.slice(i, i + 11), 2);
-        console.log('Word index:', index); // Debug log
-        if (index >= WORDLIST.length) {
-          throw new Error(`Invalid word index: ${index}`);
-        }
-        words.push(WORDLIST[index]);
-      }
-      
-      const phrase = words.join(' ');
-      console.log('Generated phrase length:', phrase.length); // Debug log
-      
+      const mixed = new Uint8Array(userData.length + randomBytes.length);
+      mixed.set(userData, 0);
+      mixed.set(randomBytes, userData.length);
+      const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', mixed));
+      const phrase = entropyToMnemonic(bytesToHex(hash.slice(0, entropyBits / 8)));
+
       setSeedPhrase(phrase);
       try {
         const k = deriveLibreKeys(phrase);
         setPublicKey(k.publicKey);
         setWif(k.wif);
-      } catch (e) {
-        console.error('Could not derive Libre keys:', e);
+      } catch {
         setPublicKey('');
         setWif('');
       }
       setShowSeed(true);
       setIsCollecting(false);
       setError('');
-    } catch (error) {
-      console.error('Error generating seed:', error);
+    } catch {
       setError('Error generating seed phrase. Please try again.');
       setIsCollecting(false);
     }
   };
 
   const startCollection = () => {
-    console.log('Starting entropy collection...');
     setEntropy([]);
     setIsCollecting(true);
     setShowSeed(false);
