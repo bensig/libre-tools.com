@@ -2,3 +2,14 @@
   from = "/*"
   to = "/index.html"
   status = 200 
+# Key-generation pages (/seed-generator, /rekey) run in this origin: allow only
+# first-party scripts so no third-party code can read generated secrets.
+# default-src is intentionally unset — Anchor/WharfKit needs esr: links, wss:
+# callbacks and inline styles, and RPC endpoints are user-configurable.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
